@@ -2,10 +2,8 @@ command:
   - "hypercorn"
   - "app:app"
   - "--bind"
-  - "127.0.0.1:8000"
+  - "127.0.0.1:$DATABRICKS_APP_PORT"
 
 env:
   - name: "SERVING_ENDPOINT_NAME"
     valueFrom: "serving_endpoint"
-  - name: "DATABRICKS_TOKEN"
-    value: "your-databricks-token"

@@ -53,13 +53,13 @@ async def run_load_test(
     stats = env.runner.stats
     
     return {
-        "test_duration": test_time,
+        "test_duration_seconds": test_time,
         "total_requests": stats.total.num_requests,
         "successful_requests": stats.total.num_requests - stats.total.num_failures,
         "failed_requests": stats.total.num_failures,
         "requests_per_second": stats.total.current_rps,
         "concurrent_users": users,
-        "response_time": {
+        "response_time_milliseconds": {
             "min": stats.total.min_response_time,
             "max": stats.total.max_response_time,
             "mean": stats.total.avg_response_time,
