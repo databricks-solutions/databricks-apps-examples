@@ -5,8 +5,8 @@ command:
   - 4
 env:
   - name: DATABRICKS_GENIE_SPACE_ID_APEX
-    value: '01efd91531171d6c94de496520f7a668'
+    value: ''
   - name: DATABRICKS_GENIE_SPACE_ID_SYNERGY
-    value: '01efea385a6c1d7fbdfe902bf84bb4d8'
+    value: ''
   - name: DATABRICKS_DASHBOARD_ID
-    value: '01effa0a6c831cffa69be5249288d046'
+    value: ''
