@@ -9,4 +9,4 @@ env:
   - name: DATABRICKS_GENIE_SPACE_ID_SYNERGY
     value: ''
   - name: DATABRICKS_DASHBOARD_ID
-    value: '01effa0a6c831cffa69be5249288d046'
+    value: ''
