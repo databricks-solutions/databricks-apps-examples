@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+httpx
+python-dotenv
+pydantic
+aiofiles  
+hypercorn
+locust
+databricks-sdk
+logging
