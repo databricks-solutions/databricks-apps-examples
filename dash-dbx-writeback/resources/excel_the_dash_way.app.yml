@@ -1,0 +1,64 @@
+resources:
+  apps:
+    excel_the_dash_way:
+      name: excel-the-dash-way
+      description: An example of Dash AG-Grid for sophisticated write-backs
+      source_code_path: ../
+      resources:
+        - sql_warehouse:
+            id: 148ccb90800933a1
+            permission: CAN_USE
+          name: sql-warehouse
+
+  volumes:
+    dash_dbx_writeback_volume:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      schema_name: ${var.schema}
+      grants:
+        - principal: ${resources.apps.excel_the_dash_way.service_principal_client_id}
+          privileges:
+            - WRITE VOLUME
+            - READ VOLUME
+            - APPLY TAG
+        - principal: ${workspace.current_user.userName} 
+          privileges:
+            - WRITE VOLUME
+            - READ VOLUME
+            - APPLY TAG
+  
+  schemas:
+    dash_dbx_writeback_schema:
+      name: ${var.schema}
+      catalog_name: ${var.catalog}
+      comment: This schema was created by Databricks Asset Bundles.
+      grants:
+        - principal: ${resources.apps.excel_the_dash_way.service_principal_client_id}
+          privileges:
+            - CREATE TABLE
+            - EXECUTE
+            - SELECT
+            - MODIFY
+            - REFRESH
+            - WRITE VOLUME
+            - READ VOLUME
+            - APPLY TAG
+            - USE SCHEMA
+        - principal: ${workspace.current_user.userName} 
+          privileges:
+            - CREATE TABLE
+            - EXECUTE
+            - SELECT
+            - MODIFY
+            - REFRESH
+            - WRITE VOLUME
+            - READ VOLUME
+            - APPLY TAG
+            - USE SCHEMA 
+
+targets:
+  azure-east:
+    mode: production
+    default: true
+    workspace:
+      host: https://adb-984752964297111.11.azuredatabricks.net 

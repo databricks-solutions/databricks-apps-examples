@@ -1,0 +1,12 @@
+command:
+  - python
+  - -m
+  - src.dash_dbx_writeback
+
+env:
+  - name: 'DATABRICKS_CATALOG'
+    value: 'daveok'
+  - name: 'DATABRICKS_SCHEMA'
+    value: 'excel_app'
+  - name: 'DATABRICKS_WAREHOUSE_ID'
+    valueFrom: 'sql-warehouse'
