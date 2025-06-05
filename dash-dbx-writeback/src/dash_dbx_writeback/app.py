@@ -33,9 +33,9 @@ log("=" * 60)
 log("INITIALIZING DASH APP")
 log("=" * 60)
 
-app = Dash(external_stylesheets=dmc.styles.ALL, suppress_callback_exceptions=True)
+app = Dash(external_stylesheets=dmc.styles.ALL, suppress_callback_exceptions=True, use_pages=True)
 
-logo = "/assets/dbx.webp"
+logo = "/assets/dbx-full.png"
 
 
 def get_icon(icon: str) -> DashIconify:

@@ -18,9 +18,7 @@ from .tables import (
     initialize_table,
 )
 from ..components.input import (
-    EDITABLE_FIELDS,
     CSV_TO_GRID_COL_MAP,
-    INITIAL_DATA,
     get_null_description,
 )
 
@@ -311,6 +309,38 @@ def reset_data(_: int) -> Tuple[None, None]:
     log(f"CALLBACK: reset_data - n_clicks: {_}")
     log("→ Clearing data and category selection")
     return None, []
+
+# 10. Delete selected rows
+@callback(
+    Output("grid-data-store", "data", allow_duplicate=True),
+    Input("delete-button", "n_clicks"),
+    State("ag-grid-table", "selectedRows"),
+    State("grid-data-store", "data"),
+    prevent_initial_call=True,
+)
+def delete_selected_rows(_: int, selected_rows: List[Dict[str, Any]], current_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Delete selected rows from the grid data store.
+    https://dash.plotly.com/dash-ag-grid/row-selection 
+    """
+    log(f"CALLBACK: delete_selected_rows - n_clicks: {_}")
+    log(f"Selected rows: {len(selected_rows) if selected_rows else 0} records")
+    
+    if not selected_rows or not current_data:
+        return current_data
+        
+    # Filter out selected rows by comparing all key-value pairs
+    filtered_data = [
+        row for row in current_data 
+        if not any(
+            all(row.get(k) == selected.get(k) for k in row.keys() & selected.keys())
+            for selected in selected_rows
+        )
+    ]
+    
+    log(f"Removed {len(current_data) - len(filtered_data)} rows")
+    return filtered_data
+
 
 
 clientside_callback(

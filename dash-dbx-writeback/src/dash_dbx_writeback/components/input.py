@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional
 
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
-from dash import html, dcc, no_update, callback, clientside_callback
+from dash import html, dcc, no_update, callback, clientside_callback, register_page
 
 from .tabs import tabs
 from ..data.sample_product_data import INITIAL_DATA
@@ -221,7 +221,8 @@ def render_input_grid() -> html.Div:
             'undoRedoCellEditing': True,
             "undoRedoCellEditingLimit": 20,
             "rowDragManaged": True,
-            "rowDragEntireRow": True
+            "rowDragEntireRow": True,
+            "rowSelection": "multiple",
         },
         defaultColDef={
             "editable": False,
@@ -259,7 +260,7 @@ def render_input_grid() -> html.Div:
                     dmc.Image(
                         h=150,
                         radius="md",
-                        src="/assets/databricks-logo.svg",
+                        src="/assets/dbx-logo.png",
                     ),
                     dmc.Text(
                         "Uploading Ranges to Databricks", size="xl", fw=700, c="black"
