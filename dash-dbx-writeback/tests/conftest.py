@@ -34,7 +34,7 @@ def conn():
 
 @pytest.fixture(scope="session")
 def test_table_name():
-    return "daveok.coles_ro.pytest_read"
+    return "daveok.dash_dbx_writeback.pytest_read"
 
 
 @pytest.fixture(scope="session")

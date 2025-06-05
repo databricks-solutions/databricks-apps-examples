@@ -1,5 +1,5 @@
 def main() -> None:
-    print("Hello from dash-coles-ro!")
+    print("Hello from dash-dbx-writeback!")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,3 @@
 """
-Components package for Dash Coles RO application.
+Components package for Dash AG-Grid Writeback application.
 """

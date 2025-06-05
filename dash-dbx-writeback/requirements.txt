@@ -12,22 +12,22 @@ click==8.2.1
     # via flask
 dash==3.0.4
     # via
-    #   dash-coles-ro (pyproject.toml)
+    #   dash-dbx-writeback (pyproject.toml)
     #   dash-ag-grid
     #   dash-bootstrap-components
     #   dash-mantine-components
 dash-ag-grid==31.3.1
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 dash-bootstrap-components==2.0.3
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 dash-iconify==0.1.2
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 dash-mantine-components==1.3.0
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 databricks-sdk==0.54.0
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 databricks-sql-connector==4.0.3
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 et-xmlfile==2.0.0
     # via openpyxl
 flask==3.0.3
@@ -62,11 +62,11 @@ packaging==25.0
     # via plotly
 pandas==2.2.3
     # via
-    #   dash-coles-ro (pyproject.toml)
+    #   dash-dbx-writeback (pyproject.toml)
     #   databricks-sql-connector
 plotly==6.1.1
     # via
-    #   dash-coles-ro (pyproject.toml)
+    #   dash-dbx-writeback (pyproject.toml)
     #   dash
 pyarrow==20.0.0
     # via databricks-sql-connector
@@ -81,7 +81,7 @@ python-dateutil==2.9.0.post0
     #   databricks-sql-connector
     #   pandas
 python-dotenv==1.1.0
-    # via dash-coles-ro (pyproject.toml)
+    # via dash-dbx-writeback (pyproject.toml)
 pytz==2025.2
     # via pandas
 requests==2.32.3

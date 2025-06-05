@@ -8,7 +8,7 @@ packages = ["src"]
 [project]
 name = "dash_dbx_writeback"
 version = "0.1.0"
-description = "Product Range Optimizer for Coles"
+description = "Example of using Dash AG-Grid for Writeback use-cases in DBx"
 requires-python = ">=3.11.1"
 dependencies = [
     "dash==3.0.4",
@@ -41,10 +41,4 @@ markers = [
 ]
 pythonpath = [
     "src"
-]
-
-[tool.uv.workspace]
-members = [
-    "dabs-with-uv",
-    "dash-coles-ro",
 ]

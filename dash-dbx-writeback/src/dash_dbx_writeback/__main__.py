@@ -1,5 +1,5 @@
 """
-Entry point for running the Dash Coles RO application as a module.
+Entry point for running the Dash AG-Grid Writeback application as a module.
 """
 
 from .app import app

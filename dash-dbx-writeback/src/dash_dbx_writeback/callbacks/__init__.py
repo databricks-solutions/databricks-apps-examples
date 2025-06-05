@@ -1,3 +1,3 @@
 """
-Callbacks package for Dash Coles RO application.
+Callbacks package for Dash AG-Grid Writeback application.
 """

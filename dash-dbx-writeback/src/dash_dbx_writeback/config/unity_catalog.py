@@ -12,7 +12,7 @@ from typing import Optional
 CATALOG_NAME = os.getenv("DATABRICKS_CATALOG", "daveok")
 
 # Unity Catalog schema name - read from environment variable with fallback
-SCHEMA_NAME = os.getenv("DATABRICKS_SCHEMA", "coles_ro")
+SCHEMA_NAME = os.getenv("DATABRICKS_SCHEMA", "dash_dbx_writeback")
 
 
 def get_full_table_name(table_name: str) -> str:
