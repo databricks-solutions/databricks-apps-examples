@@ -2,6 +2,7 @@ import base64
 import io
 import datetime
 import uuid
+import time
 from typing import List, Dict, Any, Optional, Tuple, Union
 
 import pandas as pd
@@ -76,7 +77,7 @@ def initialize_store(
         log(f"✓ Read {len(data)} records from table")
 
         log("✓ Successfully initialized from database")
-        return [] 
+        return []
     except Exception as e:
         log(f"✗ Error initializing store: {type(e).__name__}: {e}")
         import traceback
@@ -163,6 +164,8 @@ def upload_data_to_uc(
             conn=conn,
             overwrite=False,
         )
+
+        time.sleep(1)
 
         success_alert = dmc.Alert(
             title="Congrats - Forecast is submitted",
@@ -310,6 +313,7 @@ def reset_data(_: int) -> Tuple[None, None]:
     log("→ Clearing data and category selection")
     return None, []
 
+
 # 10. Delete selected rows
 @callback(
     Output("grid-data-store", "data", allow_duplicate=True),
@@ -318,29 +322,31 @@ def reset_data(_: int) -> Tuple[None, None]:
     State("grid-data-store", "data"),
     prevent_initial_call=True,
 )
-def delete_selected_rows(_: int, selected_rows: List[Dict[str, Any]], current_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def delete_selected_rows(
+    _: int, selected_rows: List[Dict[str, Any]], current_data: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """
     Delete selected rows from the grid data store.
-    https://dash.plotly.com/dash-ag-grid/row-selection 
+    https://dash.plotly.com/dash-ag-grid/row-selection
     """
     log(f"CALLBACK: delete_selected_rows - n_clicks: {_}")
     log(f"Selected rows: {len(selected_rows) if selected_rows else 0} records")
-    
+
     if not selected_rows or not current_data:
         return current_data
-        
+
     # Filter out selected rows by comparing all key-value pairs
     filtered_data = [
-        row for row in current_data 
+        row
+        for row in current_data
         if not any(
             all(row.get(k) == selected.get(k) for k in row.keys() & selected.keys())
             for selected in selected_rows
         )
     ]
-    
+
     log(f"Removed {len(current_data) - len(filtered_data)} rows")
     return filtered_data
-
 
 
 clientside_callback(

@@ -6,12 +6,12 @@ from typing import Dict, Any
 import datetime
 import inspect
 import atexit
+import dash
 
 import dash_mantine_components as dmc
 from dash import Dash, Input, Output, State, callback, _dash_renderer, html
 from dash_iconify import DashIconify
 
-from .components.input import render_input_grid
 from .config.workspace_client import close_connection
 
 
@@ -33,13 +33,54 @@ log("=" * 60)
 log("INITIALIZING DASH APP")
 log("=" * 60)
 
-app = Dash(external_stylesheets=dmc.styles.ALL, suppress_callback_exceptions=True, use_pages=True)
+# Create the app instance FIRST
+app = Dash(
+    name=__package__,
+    external_stylesheets=dmc.styles.ALL,
+    suppress_callback_exceptions=True,
+    use_pages=True,
+)
 
-logo = "/assets/dbx-full.png"
+# Now import pages and callbacks AFTER app is created
+from . import pages  # noqa: F401, E402
+from .callbacks import input_callbacks, results_callbacks  # noqa: F401, E402
+
+logo = "/assets/dbx.webp"
 
 
 def get_icon(icon: str) -> DashIconify:
-    return DashIconify(icon=icon, height=16)
+    return DashIconify(icon=icon, height=24)
+
+
+def create_nav_links():
+    """Create navigation links from the page registry"""
+    nav_links = []
+
+    # Get all registered pages
+    for page in dash.page_registry.values():
+        # Create appropriate icons for different pages
+        if page["path"] == "/":
+            icon = "material-symbols-light:house-outline-rounded"
+            label = "Modify Data"
+        elif page["path"] == "/about":
+            icon = "material-symbols-light:info-outline"
+            label = page["name"]
+        elif page["path"] == "/results":
+            icon = "material-symbols-light:data-thresholding-outline-sharp"
+            label = page["name"]
+        else:
+            icon = "material-symbols-light:page"
+            label = page["name"]
+
+        nav_links.append(
+            dmc.NavLink(
+                label=label,
+                leftSection=get_icon(icon=icon),
+                href=page["path"],
+            )
+        )
+
+    return nav_links
 
 
 layout = dmc.AppShell(
@@ -66,14 +107,6 @@ layout = dmc.AppShell(
                             p=7,
                             fit="contain",
                             style={"imageRendering": "crisp-edges"},
-                        ),
-                        dmc.Divider(
-                            orientation="vertical",
-                            size="xs",
-                            style={
-                                "display": "flex",
-                                "alignItems": "center",
-                            },
                         ),
                         html.Div(
                             [
@@ -109,20 +142,13 @@ layout = dmc.AppShell(
         ),
         dmc.AppShellNavbar(
             id="navbar",
-            children=[
-                dmc.NavLink(
-                    label="About",
-                    leftSection=get_icon(icon="bi:house-door-fill"),
-                ),
-                dmc.NavLink(
-                    label="Modify Data",
-                    leftSection=get_icon(icon="tabler:gauge"),
-                    rightSection=get_icon(icon="tabler-chevron-right"),
-                ),
-            ],
+            children=create_nav_links(),
             p="md",
         ),
-        dmc.AppShellMain(render_input_grid()),
+        dmc.AppShellMain(
+            # The page content will be displayed here via dash.page_container
+            dash.page_container
+        ),
     ],
     header={"height": 70},
     navbar={
@@ -193,3 +219,4 @@ if __name__ == "__main__":
     finally:
         # Ensure connection is closed on shutdown
         close_connection()
+

@@ -12,6 +12,7 @@ EDITABLE_FIELDS = [
     "LOYALTY_GROUP",
     "SEGMENT_1",
     "SEGMENT_2",
+    "CURRENT_ASSORTMENT",
 ]
 
 COLUMN_DEFS = [
@@ -179,7 +180,10 @@ def render_input_grid() -> html.Div:
         "Submit Forecast Run", variant="gradient", id="submit-button", n_clicks=0
     )
     delete_button = dmc.Button(
-        "Delete Rows", variant="gradient", id="delete-button", n_clicks=0,
+        "Delete Rows",
+        variant="gradient",
+        id="delete-button",
+        n_clicks=0,
         gradient={"from": "red", "to": "orange"},
     )
     upload_button = dcc.Upload(
@@ -218,7 +222,7 @@ def render_input_grid() -> html.Div:
         columnSize="autoSize",
         className="ag-theme-quartz",
         dashGridOptions={
-            'undoRedoCellEditing': True,
+            "undoRedoCellEditing": True,
             "undoRedoCellEditingLimit": 20,
             "rowDragManaged": True,
             "rowDragEntireRow": True,
@@ -246,9 +250,7 @@ def render_input_grid() -> html.Div:
         get_null_description(data=None), id="null-description-box"
     )
 
-    info_box = html.Div(
-        get_null_description(data=None), id="info-box"
-    )
+    info_box = html.Div(get_null_description(data=None), id="info-box")
 
     data_overlay = dmc.LoadingOverlay(
         id="data-load-overlay",
