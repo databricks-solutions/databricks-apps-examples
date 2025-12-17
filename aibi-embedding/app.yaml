@@ -1,0 +1,12 @@
+command:
+  - gunicorn
+  - app:app
+  - -w
+  - 4
+env:
+  - name: DATABRICKS_GENIE_SPACE_ID_APEX
+    value: ''
+  - name: DATABRICKS_GENIE_SPACE_ID_SYNERGY
+    value: ''
+  - name: DATABRICKS_DASHBOARD_ID
+    value: ''
