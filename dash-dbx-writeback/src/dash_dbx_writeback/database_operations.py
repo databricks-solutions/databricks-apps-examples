@@ -100,6 +100,7 @@ def initialize_connection_pool() -> bool:
                 kwargs={"_instance_name": instance_name},
                 min_size=db_config.POOL_MIN_SIZE,
                 max_size=db_config.POOL_MAX_SIZE,
+                timeout=db_config.POOL_TIMEOUT,
                 open=True,
             )
             

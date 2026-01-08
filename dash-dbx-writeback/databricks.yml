@@ -10,7 +10,7 @@ include:
 variables:
   catalog:
     description: Catalog to be created and assets to be deployed to
-    default: daveok
+    default: main
   schema:
     description: Schema to be created and assets to be deployed to
     default: excel_app
@@ -27,5 +27,5 @@ targets:
     mode: production 
     default: true
     workspace:
-      host: https://adb-984752964297111.11.azuredatabricks.net 
+      host: https://adb-7405614596482958.18.azuredatabricks.net
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

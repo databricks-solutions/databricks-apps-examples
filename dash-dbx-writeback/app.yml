@@ -6,6 +6,12 @@ command:
 resources:
   - name: sql-warehouse
   - name: postgres-database
+  # LLM endpoint for AI Assistant
+  # See: https://apps-cookbook.dev/docs/dash/aiml/ml_serving_invoke
+  - name: llm-endpoint
+    serving_endpoint:
+      name: databricks-meta-llama-3-3-70b-instruct
+      permission: CAN_QUERY
 
 env:
   - name: 'DATABRICKS_CATALOG'
@@ -15,4 +21,6 @@ env:
   - name: 'DATABRICKS_WAREHOUSE_ID'
     valueFrom: 'sql-warehouse'
   - name: 'LAKEBASE_SCHEMA'
-    value: 'public'
+    value: 'excel_app'
+  - name: 'LAKEBASE_INSTANCE_NAME'
+    value: 'daveok'

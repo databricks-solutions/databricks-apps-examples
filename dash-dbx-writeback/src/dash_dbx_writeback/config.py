@@ -21,12 +21,13 @@ class DatabaseConfig:
         self.SCHEMA = os.getenv("LAKEBASE_SCHEMA", "public")
         
         # Connection pool settings
-        self.POOL_MIN_SIZE = int(os.getenv("POOL_MIN_SIZE", "1"))
-        self.POOL_MAX_SIZE = int(os.getenv("POOL_MAX_SIZE", "5"))
+        self.POOL_MIN_SIZE = int(os.getenv("POOL_MIN_SIZE", "2"))
+        self.POOL_MAX_SIZE = int(os.getenv("POOL_MAX_SIZE", "10"))
+        self.POOL_TIMEOUT = float(os.getenv("POOL_TIMEOUT", "60.0"))  # seconds to wait for connection
         
         # Instance name (needed for OAuth token generation)
         self.INSTANCE_NAME = None
-        
+
         # Check if PG* variables are set (Databricks deployment mode)
         if os.getenv("PGHOST"):
             # Use standard PostgreSQL environment variables (set by Databricks)
@@ -35,8 +36,26 @@ class DatabaseConfig:
             self.DATABASE = os.getenv("PGDATABASE", "")
             self.USER = os.getenv("PGUSER", "")
             self.SSL_MODE = os.getenv("PGSSLMODE", "require")
-            # Extract instance name from PGHOST for OAuth (format: instance-name.region.databricks.net)
-            self.INSTANCE_NAME = self.HOST.split('.')[0] if self.HOST else None
+
+            # Get instance name from environment variable or derive from database resource
+            # In Databricks Apps, this should be set by the database resource
+            self.INSTANCE_NAME = os.getenv("LAKEBASE_INSTANCE_NAME")
+
+            # If not set, try to get it from WorkspaceClient by matching the host
+            if not self.INSTANCE_NAME and self.HOST:
+                try:
+                    from databricks.sdk import WorkspaceClient
+                    w = WorkspaceClient()
+                    # Try to find the instance by matching the host
+                    instances = w.database.list_database_instances()
+                    for inst in instances:
+                        if inst.read_write_dns == self.HOST:
+                            self.INSTANCE_NAME = inst.name
+                            break
+                except Exception as e:
+                    print(f"Warning: Could not determine instance name: {e}")
+                    # Last resort: extract from PGHOST (format: instance-<uuid>.database.azuredatabricks.net)
+                    self.INSTANCE_NAME = self.HOST.split('.')[0] if self.HOST else None
         else:
             # Local development mode: Use simplified variables and auto-populate
             self._init_from_lakebase_variables()

@@ -1,4 +1,9 @@
 resources:
+  database_instances:
+    dash_dbx_writeback_db_instance:
+      name: ${var.instance_name}
+      capacity: CU_1
+
   apps:
     excel_the_dash_way:
       name: excel-the-dash-way
@@ -6,32 +11,32 @@ resources:
       source_code_path: ../
       resources:
         - sql_warehouse:
-            id: 148ccb90800933a1
+            id: 367edb93c65b15e8
             permission: CAN_USE
           name: sql-warehouse
         - database:
             database_name: ${var.database}
-            instance_name: ${var.instance_name}
+            instance_name: ${resources.database_instances.dash_dbx_writeback_db_instance.name}
             permission: CAN_CONNECT_AND_CREATE
           name: postgres-database 
 
 
-  volumes:
-    dash_dbx_writeback_volume:
-      catalog_name: ${var.catalog}
-      name: ${var.schema}
-      schema_name: ${var.schema}
-      grants:
-        - principal: ${resources.apps.excel_the_dash_way.service_principal_client_id}
-          privileges:
-            - WRITE_VOLUME
-            - READ_VOLUME
-            - APPLY_TAG
-        - principal: ${workspace.current_user.userName} 
-          privileges:
-            - WRITE_VOLUME
-            - READ_VOLUME
-            - APPLY_TAG
+  # volumes:
+  #   dash_dbx_writeback_volume:
+  #     catalog_name: ${var.catalog}
+  #     name: ${var.schema}
+  #     schema_name: ${var.schema}
+  #     grants:
+  #       - principal: ${resources.apps.excel_the_dash_way.service_principal_client_id}
+  #         privileges:
+  #           - WRITE_VOLUME
+  #           - READ_VOLUME
+  #           - APPLY_TAG
+  #       - principal: ${workspace.current_user.userName} 
+  #         privileges:
+  #           - WRITE_VOLUME
+  #           - READ_VOLUME
+  #           - APPLY_TAG
   
   schemas:
     dash_dbx_writeback_schema:
