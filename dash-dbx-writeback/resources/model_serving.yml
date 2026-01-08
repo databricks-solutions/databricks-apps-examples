@@ -1,0 +1,16 @@
+# Commented out - model not yet registered
+# The AI Assistant uses foundation model endpoints instead
+# resources:
+#   model_serving_endpoints:
+#     stock_optimization_endpoint:
+#       name: stock-optimization-model
+#       config:
+#         served_entities:
+#           - entity_name: coles_inventory.models.stock_optimization_model
+#             entity_version: "1"
+#             workload_size: Small
+#             scale_to_zero_enabled: true
+#         traffic_config:
+#           routes:
+#             - served_model_name: coles_inventory-models-stock_optimization_model-1
+#               traffic_percentage: 100

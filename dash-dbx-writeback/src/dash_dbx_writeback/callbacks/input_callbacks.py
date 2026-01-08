@@ -3,6 +3,8 @@ import io
 import datetime
 import uuid
 import time
+import os
+import requests
 from typing import List, Dict, Any, Optional, Tuple, Union
 
 import pandas as pd
@@ -163,12 +165,34 @@ def upload_data_to_uc(
 
         time.sleep(1)
 
+        # Trigger Stock Optimization via MCP
+        log("→ Triggering stock optimization via MCP...")
+        try:
+            mcp_url = os.environ.get("MCP_SERVER_URL", "http://localhost:8000")
+            response = requests.post(
+                f"{mcp_url}/api/run_optimization", 
+                json={"forecast_id": forecast_id},
+                timeout=30  # Wait up to 30s for optimization
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            product_count = result.get("product_count", 0)
+            status = result.get("status", "unknown")
+            log(f"✓ MCP Optimization Status: {status} ({product_count} products)")
+            
+            opt_message = f"Optimized {product_count} products via MCP."
+            
+        except Exception as e:
+            log(f"⚠️ MCP Optimization failed: {e}")
+            opt_message = "Optimization triggered but response not confirmed."
+
         success_alert = dmc.Alert(
             title="Congrats - Forecast is submitted",
             color="green",
             radius="md",
             children=[
-                f"Your forecast is now being processed. You will receive an email when it is ready. Forecast ID: {forecast_id}"
+                f"Your forecast has been submitted. {opt_message} Forecast ID: {forecast_id}"
             ],
             style={"marginBottom": "8px"},
         )

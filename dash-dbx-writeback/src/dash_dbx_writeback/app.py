@@ -7,12 +7,17 @@ import datetime
 import inspect
 import atexit
 import dash
+import diskcache
 
 import dash_mantine_components as dmc
-from dash import Dash, Input, Output, State, callback, _dash_renderer, html
+from dash import Dash, Input, Output, State, callback, _dash_renderer, html, DiskcacheManager
 from dash_iconify import DashIconify
 
 from .database_operations import close_all_connections
+
+# Setup background callback manager for long-running tasks
+cache = diskcache.Cache("./cache")
+background_callback_manager = DiskcacheManager(cache)
 
 
 def log(message: str) -> None:
@@ -47,11 +52,12 @@ app = Dash(
     external_stylesheets=dmc.styles.ALL,
     suppress_callback_exceptions=True,
     use_pages=True,
+    background_callback_manager=background_callback_manager,
 )
 
 # Now import pages and callbacks AFTER app is created
 from . import pages  # noqa: F401, E402
-from .callbacks import input_callbacks, results_callbacks  # noqa: F401, E402
+from .callbacks import input_callbacks, stock_optimization_callbacks, ai_callbacks  # noqa: F401, E402
 
 logo = "/assets/dbx.webp"
 
@@ -61,20 +67,30 @@ def get_icon(icon: str) -> DashIconify:
 
 
 def create_nav_links():
-    """Create navigation links from the page registry"""
+    """Create navigation links from the page registry in a specific order"""
     nav_links = []
-
-    # Get all registered pages
-    for page in dash.page_registry.values():
+    
+    # Define the order of pages (About first, then rest)
+    page_order = ["/about", "/", "/stock-optimization"]
+    
+    # Create a dict for quick lookup
+    pages_by_path = {page["path"]: page for page in dash.page_registry.values()}
+    
+    # Add pages in the defined order
+    for path in page_order:
+        if path not in pages_by_path:
+            continue
+        page = pages_by_path[path]
+        
         # Create appropriate icons for different pages
-        if page["path"] == "/":
+        if path == "/":
             icon = "material-symbols-light:house-outline-rounded"
             label = "Modify Data"
-        elif page["path"] == "/about":
+        elif path == "/about":
             icon = "material-symbols-light:info-outline"
             label = page["name"]
-        elif page["path"] == "/results":
-            icon = "material-symbols-light:data-thresholding-outline-sharp"
+        elif path == "/stock-optimization":
+            icon = "material-symbols-light:inventory-2-outline"
             label = page["name"]
         else:
             icon = "material-symbols-light:page"
@@ -87,12 +103,27 @@ def create_nav_links():
                 href=page["path"],
             )
         )
+    
+    # Add any remaining pages not in the order list
+    for path, page in pages_by_path.items():
+        if path not in page_order:
+            nav_links.append(
+                dmc.NavLink(
+                    label=page["name"],
+                    leftSection=get_icon(icon="material-symbols-light:page"),
+                    href=page["path"],
+                )
+            )
 
     return nav_links
 
 
+from dash import dcc
+
 layout = dmc.AppShell(
     [
+        # Location component for programmatic navigation
+        dcc.Location(id="url", refresh=True),
         dmc.AppShellHeader(
             children=[
                 dmc.Group(
@@ -119,19 +150,17 @@ layout = dmc.AppShell(
                         html.Div(
                             [
                                 dmc.Text(
-                                    "Excel the Dash Way",
+                                    "Coles Inventory Intelligence",
                                     size="xl",
-                                    fw=1000,
-                                    c="#222",
+                                    fw=700,
+                                    c="#E21837",
                                     className="header-title",
                                 ),
                                 dmc.Text(
-                                    "Writeback to Databricks like it was Excel",
+                                    "Smart Forecasting & Stock Optimization",
                                     size="md",
-                                    fw=900,
-                                    c="#444",
-                                    variant="gradient",
-                                    gradient={"from": "red", "to": "blue", "deg": 45},
+                                    fw=500,
+                                    c="#333",
                                     className="header-subtitle",
                                 ),
                             ],
@@ -170,7 +199,22 @@ layout = dmc.AppShell(
 
 app.layout = dmc.MantineProvider(
     theme={
-        "fontFamily": "Poppins, sans-serif",
+        "fontFamily": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+        "primaryColor": "red",
+        "colors": {
+            "red": [
+                "#FFE8EC",
+                "#FFC9D1",
+                "#FFA3AF",
+                "#FF7D8E",
+                "#FF5670",
+                "#E21837",  # Coles primary red
+                "#C71530",
+                "#AC1229",
+                "#911022",
+                "#760D1B",
+            ]
+        },
         "components": {
             "Text": {
                 "styles": {
@@ -186,9 +230,26 @@ app.layout = dmc.MantineProvider(
                             "fontSize": "1rem",
                             "letterSpacing": "0.3px",
                             "lineHeight": "1.4",
-                            "fontStyle": "italic",
                         }
                     },
+                }
+            },
+            "Button": {
+                "defaultProps": {
+                    "color": "red",
+                }
+            },
+            "NavLink": {
+                "styles": {
+                    "root": {
+                        "&[data-active]": {
+                            "backgroundColor": "#FFE8EC",
+                            "color": "#E21837",
+                        },
+                        "&:hover": {
+                            "backgroundColor": "#FFF5F7",
+                        }
+                    }
                 }
             }
         },

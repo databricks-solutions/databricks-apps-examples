@@ -170,27 +170,33 @@ def render_input_grid() -> html.Div:
 
     reset_button = dmc.Button(
         "Reset",
-        variant="gradient",
+        variant="outline",
+        color="red",
         id="reset-button",
         n_clicks=0,
-        gradient={"from": "orange", "to": "red"},
     )
     download_button = dmc.Button(
-        "Download CSV", variant="gradient", id="csv-button", n_clicks=0
+        "Download CSV", variant="outline", color="red", id="csv-button", n_clicks=0
     )
     sumbit_button = dmc.Button(
-        "Submit Forecast Run", variant="gradient", id="submit-button", n_clicks=0
+        "Submit Forecast Run",
+        variant="filled",
+        color="red",
+        id="submit-button",
+        n_clicks=0,
+        loading=False,
+        loaderProps={"type": "dots"},
     )
     delete_button = dmc.Button(
         "Delete Rows",
-        variant="gradient",
+        variant="outline",
+        color="red",
         id="delete-button",
         n_clicks=0,
-        gradient={"from": "red", "to": "orange"},
     )
     upload_button = dcc.Upload(
         id="upload-data",
-        children=dmc.Button("Upload CSV", variant="gradient"),
+        children=dmc.Button("Upload CSV", variant="outline", color="red"),
         multiple=False,
     )
 
@@ -276,12 +282,113 @@ def render_input_grid() -> html.Div:
         visible=False,
     )
 
+    # Store for the submitted forecast ID
+    forecast_id_store = dcc.Store(id="submitted-forecast-id", storage_type="session")
+    
+    # Submission progress panel with Databricks branding
+    submission_progress = html.Div(
+        id="submission-progress-container",
+        children=[
+            dmc.Paper(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Image(
+                                src="/assets/dbx-logo.png",
+                                h=40,
+                                w=40,
+                                fit="contain",
+                            ),
+                            dmc.Stack(
+                                [
+                                    dmc.Text("Processing Forecast", fw=700, size="lg"),
+                                    dmc.Text(
+                                        id="submission-status-text",
+                                        children="Submitting to Databricks...",
+                                        size="sm",
+                                        c="dimmed",
+                                    ),
+                                ],
+                                gap=2,
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                    dmc.Space(h=16),
+                    dmc.Progress(
+                        id="submission-progress-bar",
+                        value=0,
+                        size="xl",
+                        radius="xl",
+                        striped=True,
+                        animated=True,
+                        color="red",
+                    ),
+                    dmc.Space(h=8),
+                    dmc.Group(
+                        [
+                            dmc.Badge(
+                                id="submission-step-badge",
+                                children="Step 1/3",
+                                color="red",
+                                variant="light",
+                            ),
+                            dmc.Text(
+                                id="submission-step-detail",
+                                children="Writing forecast data...",
+                                size="xs",
+                                c="dimmed",
+                                ff="monospace",
+                            ),
+                        ],
+                        gap="sm",
+                    ),
+                ],
+                p="lg",
+                radius="md",
+                withBorder=True,
+                style={"backgroundColor": "#fff5f5", "borderColor": "#E21837"},
+            ),
+        ],
+        style={"display": "none", "marginTop": "20px"},
+    )
+    
+    # Navigation card that appears after submission
+    results_nav_card = html.Div(
+        id="results-nav-container",
+        children=[
+            dmc.Alert(
+                id="submission-success-alert",
+                title="✅ Forecast Submitted Successfully!",
+                color="green",
+                radius="md",
+                children=[
+                    dmc.Text(id="submission-forecast-id-text", size="sm"),
+                    dmc.Space(h=10),
+                    dmc.Group([
+                        dmc.Button(
+                            "View Results & Ask AI",
+                            id="view-results-button",
+                            color="red",
+                            variant="filled",
+                            leftSection=html.Span("🤖"),
+                            size="md",
+                        ),
+                        dmc.Text("Navigate to see optimization results and ask the AI Assistant questions", size="xs", c="dimmed"),
+                    ], gap="md"),
+                ],
+            ),
+        ],
+        style={"display": "none"},  # Hidden by default
+    )
+    
     return html.Div(
         [
             html.Div(
                 id="page-load", style={"display": "none"}
             ),  # Hidden div for initialization trigger
             store,
+            forecast_id_store,
             dmc.Space(h=10),
             category_dropdown,
             dmc.Space(h=10),
@@ -299,5 +406,9 @@ def render_input_grid() -> html.Div:
                     overwrite_switch,
                 ]
             ),
+            # Submission progress (shown during processing)
+            submission_progress,
+            # Navigation to results appears after submission
+            results_nav_card,
         ]
     )
