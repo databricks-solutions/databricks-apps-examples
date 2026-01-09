@@ -1,0 +1,19 @@
+bundle:
+  name: excel-writeback
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+resources:
+  apps:
+    excel_writeback_ui:
+      name: excel-writeback-ui-${workspace.current_user.short_name}
+      description: Excel-like data editing interface with Dash
+      source_code_path: ui_app
+      
+    excel_writeback_mcp:
+      name: excel-writeback-mcp-${workspace.current_user.short_name}
+      description: MCP server for Excel Writeback with elevated privileges
+      source_code_path: mcp_app

@@ -158,11 +158,15 @@ def execute_query(query: str, params: Optional[tuple] = None) -> list[dict]:
     try:
         with conn.cursor() as cur:
             cur.execute(query, params)
+            conn.commit()  # Commit the transaction (important for DDL)
             if cur.description is None:
                 return []
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
             return [dict(zip(columns, row)) for row in rows]
+    except Exception as e:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 

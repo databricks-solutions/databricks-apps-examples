@@ -10,7 +10,8 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 import pandas as pd
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
-from dash import Input, Output, State, callback, clientside_callback, callback_context
+import dash
+from dash import Input, Output, State, callback, clientside_callback, callback_context, no_update
 
 from ..database_operations import get_connection, return_connection
 from ..config import db_config
@@ -110,7 +111,10 @@ def export_data_as_csv(n_clicks: Optional[int]) -> bool:
 @callback(
     Output("submit-button", "disabled"),
     Output("null-description-box", "children", allow_duplicate=True),
-    Output("data-load-overlay", "visible", allow_duplicate=True),
+    Output("data-load-overlay", "visible"),
+    Output("submitted-forecast-id", "data"),
+    Output("results-nav-container", "style"),
+    Output("submission-forecast-id-text", "children"),
     Input("submit-button", "n_clicks"),
     Input("grid-data-store", "data"),
     Input("upload-data", "contents"),
@@ -120,7 +124,7 @@ def upload_data_to_uc(
     n_clicks: Optional[int],
     store_data: List[Dict[str, Any]],
     upload_clicks: Optional[str],
-) -> Tuple[bool, List[dmc.Alert], bool]:
+) -> Tuple[bool, List[dmc.Alert], bool, Optional[str], Dict, str]:
     log(
         f"CALLBACK: upload_data_to_uc - n_clicks: {n_clicks}, has_upload: {upload_clicks is not None}"
     )
@@ -134,10 +138,13 @@ def upload_data_to_uc(
     has_critical_errors = any(alert.color not in ["green"] for alert in alerts)
     log(f"Has critical errors: {has_critical_errors}")
 
+    # Default hidden states
+    hidden_style = {"display": "none"}
+    visible_style = {"display": "block", "marginTop": "20px"}
+
     if has_critical_errors:
-        # Disable if critical errors
         log("→ Disabling submit button due to errors")
-        return True, alerts, False
+        return True, alerts, False, None, hidden_style, ""
 
     if n_clicks:
         log("→ Processing forecast submission")
@@ -163,7 +170,7 @@ def upload_data_to_uc(
             overwrite=False,
         )
 
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Trigger Stock Optimization via MCP
         log("→ Triggering stock optimization via MCP...")
@@ -172,7 +179,7 @@ def upload_data_to_uc(
             response = requests.post(
                 f"{mcp_url}/api/run_optimization", 
                 json={"forecast_id": forecast_id},
-                timeout=30  # Wait up to 30s for optimization
+                timeout=30
             )
             response.raise_for_status()
             result = response.json()
@@ -197,8 +204,23 @@ def upload_data_to_uc(
             style={"marginBottom": "8px"},
         )
         log("✓ Forecast submitted successfully")
-        return True, [success_alert], False
-    return False, alerts, False
+        return True, [success_alert], False, forecast_id, visible_style, f"Forecast ID: {forecast_id}"
+    
+    return False, alerts, False, None, hidden_style, ""
+
+
+# 3c. Navigate to results page
+@callback(
+    Output("url", "href", allow_duplicate=True),
+    Input("view-results-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def navigate_to_results(n_clicks: Optional[int]) -> str:
+    """Navigate to stock optimization results page"""
+    if n_clicks:
+        log("→ Navigating to stock optimization results")
+        return "/stock-optimization"
+    return no_update
 
 
 # 4. Update null description when store changes
@@ -383,21 +405,3 @@ def delete_selected_rows(
     log(f"Removed {len(current_data) - len(filtered_data)} rows")
     return filtered_data
 
-
-clientside_callback(
-    """
-    function(n_clicks) {
-        return (function(n_clicks) {
-            if (n_clicks === null || n_clicks === undefined) {
-                return false;
-            }
-            const timestamp = new Date().toISOString();
-            console.log(`[${timestamp}] CLIENTSIDE CALLBACK: updateLoadingState - n_clicks:`, n_clicks);
-            return true;
-        })(n_clicks);
-    }
-    """,
-    Output("data-load-overlay", "visible", allow_duplicate=True),
-    Input("submit-button", "n_clicks"),
-    prevent_initial_call=True,
-)

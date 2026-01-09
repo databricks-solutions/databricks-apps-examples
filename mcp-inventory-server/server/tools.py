@@ -14,9 +14,10 @@ import datetime
 # =============================================================================
 
 def _run_forecast_optimization_impl(forecast_id: str, model_endpoint: str = "stock-optimization-model") -> dict:
-    """Implementation of run_forecast_optimization"""
+    """Implementation of run_forecast_optimization with auto-setup Feature Serving"""
     try:
         from databricks.sdk import WorkspaceClient
+        from server.feature_serving_setup import get_feature_serving_manager
 
         # 1. Fetch forecast submission data
         query = """
@@ -34,42 +35,58 @@ def _run_forecast_optimization_impl(forecast_id: str, model_endpoint: str = "sto
                 "product_count": 0
             }
 
-        # 2. Transform forecast data (Dummy Feature Engineering)
-        input_records = []
+        # 2. Get Features (automatically initializes Feature Serving if needed)
+        sell_ids = [row['SELL_ID'] for row in forecast_data]
         category_map = {}
         
         for row in forecast_data:
-            # Use shelf space as a proxy for demand
-            base_demand = float(row.get('SHELF_SPACE_CM', 10) or 10) * 10
-            sell_id = row['SELL_ID']
-            
-            record = {
-                'sell_id': sell_id,
-                'avg_daily_demand': base_demand,
-                'demand_std': base_demand * 0.2,
-                'total_forecast_30d': base_demand * 30,
-                'unit_cost': 10.0,
-                'selling_price': 20.0,
-                'current_stock': 0,
-                'safety_stock': 0
-            }
-            input_records.append(record)
-            
-            category_map[sell_id] = {
+            category_map[row['SELL_ID']] = {
                 'category': row.get('CATEGORY_NAME', 'Unknown'),
                 'subcategory': row.get('SUBCATEGORY_NAME', 'Unknown'),
                 'product_name': row.get('PRODUCT_NAME', 'Unknown')
             }
 
-        # 3. Invoke Model Serving
+        # Use Feature Serving Manager (handles auto-setup and fallback)
+        fs_manager = get_feature_serving_manager()
+        features, feature_method = fs_manager.get_features(sell_ids)
+        
+        if features:
+            # Got features from Feature Serving
+            input_records = features
+            print(f"✓ Using Feature Serving ({len(features)} products)")
+        else:
+            # Fallback: Generate dummy features
+            print(f"→ Using fallback feature generation ({len(sell_ids)} products)")
+            input_records = []
+            for row in forecast_data:
+                base_demand = float(row.get('SHELF_SPACE_CM', 10) or 10) * 10
+                sell_id = row['SELL_ID']
+                
+                record = {
+                    'sell_id': sell_id,
+                    'avg_daily_demand': base_demand,
+                    'demand_std': base_demand * 0.2,
+                    'total_forecast_30d': base_demand * 30,
+                    'unit_cost': 10.0,
+                    'selling_price': 20.0,
+                    'current_stock': 0,
+                    'safety_stock': 0
+                }
+                input_records.append(record)
+
+        # 3. Invoke Model Serving with features
         w = WorkspaceClient()
         
-        serving_input = {
-            "sell_id": [r["sell_id"] for r in input_records],
-            "avg_daily_demand": [r["avg_daily_demand"] for r in input_records],
-            "current_stock": [r["current_stock"] for r in input_records],
-            "safety_stock": [r["safety_stock"] for r in input_records],
-        }
+        # Prepare serving input from features
+        serving_input = []
+        for rec in input_records:
+            serving_record = {
+                "sell_id": rec.get("sell_id"),
+                "avg_daily_demand": rec.get("avg_daily_demand", 0),
+                "current_stock": rec.get("current_stock", 0),
+                "safety_stock": rec.get("safety_stock", 0),
+            }
+            serving_input.append(serving_record)
 
         try:
             response = w.serving_endpoints.query(
@@ -77,12 +94,13 @@ def _run_forecast_optimization_impl(forecast_id: str, model_endpoint: str = "sto
                 dataframe_records=serving_input
             )
             predictions = response.predictions if hasattr(response, 'predictions') else []
-            method_used = "model_serving"
+            method_used = "model_serving_with_features" if use_feature_serving else "model_serving_fallback"
         except Exception as model_err:
-            # Fallback logic
+            print(f"⚠️  Model Serving failed: {model_err}")
+            # Fallback logic: Use EOQ heuristic
             predictions = []
             for rec in input_records:
-                demand = rec['avg_daily_demand']
+                demand = rec.get('avg_daily_demand', 50)
                 qty = (2 * demand * 50 / 0.2) ** 0.5 
                 predictions.append({
                     "optimal_order_qty": qty,

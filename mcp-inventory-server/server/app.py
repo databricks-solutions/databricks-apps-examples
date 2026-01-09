@@ -11,11 +11,20 @@ from typing import Optional
 from .tools import load_tools
 from .utils import header_store
 from . import api_handlers
+from .feature_serving_setup import auto_initialize_on_startup
 
 # Create the FastMCP server instance
 mcp_server = FastMCP(name="inventory-mcp-server")
 load_tools(mcp_server)
 mcp_app = mcp_server.http_app()
+
+# Auto-initialize Feature Serving on first import
+# This runs when the module is loaded, ensuring setup happens early
+try:
+    auto_initialize_on_startup()
+except Exception as e:
+    print(f"[STARTUP] Feature Serving auto-initialization encountered an issue: {e}")
+    print("[STARTUP] System will use fallback feature generation")
 
 app = FastAPI(
     title="Coles Inventory Intelligence MCP Server",

@@ -1,0 +1,27 @@
+# Configuration for the main Dash UI application
+# Restricted permissions - read-only database access for user-facing UI
+
+command: ["uv", "run", "uvicorn", "excel_writeback.backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+env:
+  - name: LAKEBASE_INSTANCE_NAME
+    value: daveok
+  - name: LAKEBASE_DATABASE
+    value: databricks_postgres
+  - name: LAKEBASE_SCHEMA
+    value: excel_app
+
+resources:
+  # Database connection for inventory data (restricted to connect only)
+  - name: postgres-database
+    database:
+      database_name: databricks_postgres
+      instance_name: daveok
+      permission: CAN_CONNECT  # Read-only for UI - writeback handled by MCP
+  
+  # SQL Warehouse for Unity Catalog queries
+  - name: sql-warehouse
+    sql_warehouse:
+      id: 367edb93c65b15e8
+      permission: CAN_USE
+

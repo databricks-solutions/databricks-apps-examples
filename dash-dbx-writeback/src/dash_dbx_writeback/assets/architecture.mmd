@@ -1,0 +1,71 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'primaryTextColor': '#333333', 'primaryBorderColor': '#FF3621', 'lineColor': '#1A73E8', 'secondaryColor': '#F8F9FA', 'tertiaryColor': '#ffffff'}}}%%
+flowchart LR
+    %% Styles
+    classDef user fill:#E8F0FE,stroke:#1A73E8,stroke-width:2px,color:#1A73E8
+    classDef dbx fill:#F8F9FA,stroke:#B0BEC5,stroke-width:2px,stroke-dasharray: 5 5
+    classDef app fill:#ffffff,stroke:#FF3621,stroke-width:2px
+    classDef agent fill:#ffffff,stroke:#FF3621,stroke-width:2px
+    classDef data fill:#FFF5F5,stroke:#FF3621,stroke-width:2px
+    classDef gateway fill:#FFF5F5,stroke:#FF3621,stroke-width:2px
+    classDef serving fill:#ffffff,stroke:#FF3621,stroke-width:2px
+    classDef uc fill:#ffffff,stroke:#FF3621,stroke-width:2px
+
+    %% Actors
+    User((User)):::user
+
+    subgraph Databricks [Data Intelligence Platform]
+        direction LR
+        
+        %% Column 1: App Layer
+        subgraph Apps [Applications & Agents]
+            direction TB
+            RangeApp[Databricks App<br/>Range Optimizer]:::app
+            Agent[Agent<br/>Orchestration Framework]:::agent
+        end
+
+        %% Column 2: Middleware
+        subgraph Middle [Intelligence & Gateway]
+            direction TB
+            MCP[Databricks App<br/>Custom MCP Server]:::app
+            Gateway[AI Gateway]:::gateway
+        end
+
+        %% Column 3: Data & Models
+        subgraph Data [Data & Models]
+            direction TB
+            Lakebase[("Lakebase<br/>PostgreSQL")]:::data
+            OptModel[["Optimizer Model"]]:::data
+            Serving["Model Serving<br/>LLM"]:::serving
+            Inference[Inference Table]:::data
+        end
+
+        %% Column 4: Governance
+        subgraph Gov [Governance]
+            direction TB
+            UC_Forecast["Forecast Results<br/>(Delta)"]:::uc
+            UC_Models["Registered<br/>Optimizer Models"]:::uc
+        end
+    end
+
+    %% Connections
+    User -->|query / response| RangeApp
+    
+    RangeApp <--> Agent
+    RangeApp --> Lakebase
+    
+    Agent --> MCP
+    Agent --> Gateway
+    
+    MCP <--> Lakebase
+    MCP --> OptModel
+    
+    Lakebase <--> OptModel
+    
+    Gateway <--> Serving
+    Gateway --> Inference
+    
+    %% Governance links
+    UC_Forecast -.-> Lakebase
+    UC_Models -.-> OptModel
+
+    class Databricks dbx

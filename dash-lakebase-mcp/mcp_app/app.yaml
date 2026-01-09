@@ -1,0 +1,32 @@
+# Configuration for the MCP Server application
+# Elevated permissions - full database access and LLM access for AI tools
+
+command: ["uv", "run", "uvicorn", "excel_writeback.backend.mcp_standalone:app", "--host", "0.0.0.0", "--port", "8000"]
+
+env:
+  - name: LAKEBASE_INSTANCE_NAME
+    value: daveok
+  - name: LAKEBASE_DATABASE
+    value: databricks_postgres
+  - name: LAKEBASE_SCHEMA
+    value: excel_app
+
+resources:
+  # Database connection with elevated privileges for MCP tools
+  - name: postgres-database
+    database:
+      database_name: databricks_postgres
+      instance_name: daveok
+      permission: CAN_CONNECT_AND_CREATE  # Full access for MCP tools
+  
+  # SQL Warehouse for Unity Catalog queries
+  - name: sql-warehouse
+    sql_warehouse:
+      id: 367edb93c65b15e8
+      permission: CAN_USE
+  
+  # LLM endpoint for generating insights (MCP only)
+  - name: llm-endpoint
+    serving_endpoint:
+      name: databricks-meta-llama-3-3-70b-instruct
+      permission: CAN_QUERY

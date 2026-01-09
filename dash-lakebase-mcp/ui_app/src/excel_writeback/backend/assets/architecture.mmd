@@ -1,0 +1,60 @@
+graph TD
+    %% Nodes
+    user((User))
+    
+    subgraph "Databricks App (UI)"
+        ui[Range Optimizer]
+    end
+    
+    subgraph "Databricks App (Backend)"
+        mcp[Custom MCP Server]
+    end
+    
+    subgraph "Agent"
+        agent[Orchestration Framework]
+    end
+    
+    subgraph "Data Platform"
+        lakebase[(Lakebase\nPostgreSQL)]
+        serving[Model Serving Endpoint]
+        gateway[AI Gateway]
+        llm[Model Serving\nClaude Sonnet 4.5]
+    end
+    
+    subgraph "Unity Catalog"
+        uc_forecast[Forecast Results]
+        uc_ranges[Selected Ranges]
+        uc_optimizer[Optimizer Results]
+        uc_models[[Registered Optimizer\nMLFlow Models]]
+    end
+
+    %% Relationships
+    user <-->|"(1) Range Selected"| ui
+    
+    ui -->|"(2) Save Range via MCP"| mcp
+    mcp --> lakebase
+    
+    mcp --> serving
+    serving -->|"(3) Inference using Feature Store"| lakebase
+    
+    ui -->|"(4) Trigger Agentic Analysis"| agent
+    agent --> mcp
+    
+    agent <-->|prompt/response| gateway
+    gateway <--> llm
+    
+    agent -->|"(5) Optimized Ranges"| ui
+    
+    %% Unity Catalog Integrations
+    lakebase <--> uc_forecast
+    lakebase <--> uc_ranges
+    lakebase <--> uc_optimizer
+    serving -.-> uc_models
+
+    %% Styling
+    classDef plain fill:#fff,stroke:#333,stroke-width:1px;
+    classDef db fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef app fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    
+    class ui,mcp,agent,serving,gateway,llm plain;
+    class lakebase,uc_forecast,uc_ranges,uc_optimizer,uc_models db;
