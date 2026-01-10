@@ -1,1 +1,0 @@
-command: ["uvicorn", "my_app.backend.app:app", "--workers", "2"]
