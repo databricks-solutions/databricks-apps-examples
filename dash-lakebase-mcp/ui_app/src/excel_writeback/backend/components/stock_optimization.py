@@ -7,7 +7,7 @@ from dash import html, dcc
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from .ai_assistant import render_ai_assistant, render_key_insights, render_ai_chat_button, render_ai_chat_drawer
+from .ai_assistant import render_key_insights, render_ai_chat_button, render_ai_chat_drawer
 
 
 DEFAULT_COLUMN_DEFS: List[Dict[str, Any]] = [
@@ -286,15 +286,18 @@ def render_stock_optimization_page() -> html.Div:
     # Hidden trigger for page load
     page_load_trigger = html.Div(id="optimization-page-load", style={"display": "none"})
 
-    # AI Assistant components
-    ai_assistant = render_ai_assistant()
-
     return html.Div([
         page_load_trigger,
         optimization_store,
         summary_store,
-        # AI Assistant stores and drawer (rendered by ai_assistant)
-        ai_assistant,
+        # AI Assistant stores, button and drawer (without key insights here)
+        html.Div([
+            dcc.Store(id="ai-forecast-context", storage_type="memory"),
+            dcc.Store(id="ai-chat-history", storage_type="memory", data=[]),
+            html.Div(id="ai-loading-output", style={"display": "none"}),
+            render_ai_chat_button(),
+            render_ai_chat_drawer(),
+        ]),
         dmc.Space(h=20),
         dmc.Title("Stock Optimization", order=2, c="#E21837"),
         dmc.Space(h=10),
@@ -308,14 +311,15 @@ def render_stock_optimization_page() -> html.Div:
         dmc.Space(h=10),
         alert,
         dmc.Space(h=20),
-        # Key Insights - shows after forecast selected (rendered inside ai_assistant)
-        dmc.Space(h=10),
-        dmc.Group([download_button], gap="md"),
-        dmc.Space(h=20),
         loading,
         html.Div(id="optimization-summary-cards"),
         dmc.Space(h=20),
         html.Div(id="optimization-charts-container"),
+        dmc.Space(h=20),
+        dmc.Group([download_button], gap="md"),
+        dmc.Space(h=20),
+        # Key Insights - shows after download button
+        render_key_insights(),
         dmc.Space(h=20),
         dmc.Text("Detailed Results:", size="lg", fw=600),
         dmc.Space(h=10),
