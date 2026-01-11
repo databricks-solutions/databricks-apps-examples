@@ -176,16 +176,21 @@ def upload_data_to_uc(
             error_msg = result[0]
             log(f"✗ Database write failed: {error_msg}")
             return_connection(conn)
+            error_alert = dmc.Alert(
+                children=f"Failed to save forecast data: {error_msg}",
+                title="Database Error",
+                color="red",
+                withCloseButton=True,
+            )
+            # Return all 6 outputs with correct types:
+            # (bool, List[Alert], bool, Optional[str], Dict, str)
             return (
-                dmc.Alert(
-                    children=f"Failed to save forecast data: {error_msg}",
-                    title="Database Error",
-                    color="red",
-                    withCloseButton=True,
-                ),
-                False,
-                no_update,
-                f"Failed to save forecast (ID: {forecast_id})"
+                True,  # submit-button disabled
+                [error_alert],  # null-description-box children
+                False,  # data-load-overlay visible
+                None,  # submitted-forecast-id data
+                hidden_style,  # results-nav-container style
+                f"Failed to save forecast (ID: {forecast_id})",  # submission-forecast-id-text
             )
 
         log(f"✓ Successfully inserted {result} rows to database")
