@@ -12,7 +12,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
 from .config import conf
-from .router import api
 from .logger import logger
 from contextlib import asynccontextmanager
 
@@ -129,10 +128,9 @@ def create_dash_app():
 
 
 # Create FastAPI app (without lifespan first)
+# Note: UI app does NOT have its own API endpoints
+# All data operations go through MCP Server
 app = FastAPI(title=conf.app_name)
-
-# Include API router FIRST (so /api/* routes take precedence)
-app.include_router(api)
 
 
 @asynccontextmanager

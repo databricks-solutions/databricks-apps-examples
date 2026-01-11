@@ -1,9 +1,7 @@
 from typing import List, Union
 
 import dash_mantine_components as dmc
-from dash import Input, Output, html, callback, State, callback_context
-from ..database import get_connection
-from ..config import db_config
+from dash import Input, Output, html, callback
 
 tabs = html.Div(
     [

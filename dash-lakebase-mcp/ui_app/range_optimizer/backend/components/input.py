@@ -14,14 +14,16 @@ EDITABLE_FIELDS = [
     "CURRENT_FACINGS",
     "IS_MUST_STOCK",
     "STATUS",
+    "SEGMENT",  # Dynamic options based on CATEGORY
 ]
 
 # Column definitions for Range Optimizer SKU grid
+# Note: editable=True is set here for columns in EDITABLE_FIELDS
 COLUMN_DEFS = [
     {"field": "SKU_ID", "headerName": "SKU ID", "filter": "agTextColumnFilter", "pinned": "left", "width": 100},
     {"field": "SKU_NAME", "headerName": "Product Name", "filter": "agTextColumnFilter", "width": 220},
     {"field": "BRAND", "headerName": "Brand", "filter": "agTextColumnFilter", "width": 120},
-    {"field": "SEGMENT", "headerName": "Segment", "filter": "agTextColumnFilter", "width": 120},
+    {"field": "SEGMENT", "headerName": "Segment", "filter": "agTextColumnFilter", "width": 120, "editable": True},
     {"field": "PACK_SIZE", "headerName": "Pack Size", "filter": "agTextColumnFilter", "width": 100},
     {"field": "PACK_WIDTH_MM", "headerName": "Width (mm)", "filter": "agNumberColumnFilter", "type": "numericColumn", "width": 110},
     {
@@ -30,6 +32,7 @@ COLUMN_DEFS = [
         "filter": "agNumberColumnFilter",
         "type": "numericColumn",
         "width": 120,
+        "editable": True,
     },
     {
         "field": "UNIT_PRICE",
@@ -37,6 +40,7 @@ COLUMN_DEFS = [
         "filter": "agNumberColumnFilter",
         "type": "numericColumn",
         "width": 100,
+        "editable": True,
         "valueFormatter": {"function": "d3.format(',.2f')(params.value)"},
     },
     {
@@ -45,6 +49,7 @@ COLUMN_DEFS = [
         "filter": "agNumberColumnFilter",
         "type": "numericColumn",
         "width": 100,
+        "editable": True,
         "valueFormatter": {"function": "d3.format(',.2f')(params.value)"},
     },
     {
@@ -61,6 +66,7 @@ COLUMN_DEFS = [
         "filter": "agNumberColumnFilter",
         "type": "numericColumn",
         "width": 130,
+        "editable": True,
     },
     {
         "field": "IS_PRIVATE_LABEL",
@@ -74,9 +80,10 @@ COLUMN_DEFS = [
         "headerName": "Must Stock",
         "filter": "agTextColumnFilter",
         "width": 110,
+        "editable": True,
         "cellRenderer": "agCheckboxCellRenderer",
     },
-    {"field": "STATUS", "headerName": "Status", "filter": "agTextColumnFilter", "width": 100},
+    {"field": "STATUS", "headerName": "Status", "filter": "agTextColumnFilter", "width": 100, "editable": True},
 ]
 
 CSV_TO_GRID_COL_MAP = {
@@ -314,19 +321,8 @@ def render_input_grid() -> html.Div:
         html.Div: A Div containing the Range Optimizer input components.
     """
 
-    # Add editable property and cellStyle for fields in EDITABLE_FIELDS
-    for col in COLUMN_DEFS:
-        if col["field"] in EDITABLE_FIELDS:
-            col["editable"] = True
-            col["cellStyle"] = {
-                "styleConditions": [
-                    {
-                        "condition": "params.value === null || params.value === undefined || params.value === ''",
-                        "style": {"backgroundColor": "#ffcccc"},
-                    },
-                    {"condition": "true", "style": {"backgroundColor": "#e6f3ff"}},
-                ]
-            }
+    # Note: editable and cellStyle are set dynamically by update_column_defs callback
+    # This allows the callback to control which fields are editable based on EDITABLE_FIELDS
 
     reset_button = dmc.Button(
         "Reset",
@@ -410,6 +406,7 @@ def render_input_grid() -> html.Div:
         columnSize="sizeToFit",  # fit columns to viewport so headers stay visible
         className="ag-theme-quartz",
         dashGridOptions={
+            "singleClickEdit": True,  # Enter edit mode with single click
             "undoRedoCellEditing": True,
             "undoRedoCellEditingLimit": 20,
             "rowDragManaged": True,
