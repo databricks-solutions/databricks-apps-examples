@@ -39,7 +39,8 @@ screen -ls | grep "ui-app" | awk '{print $1}' | xargs -I {} screen -X -S {} quit
 
 echo ""
 echo "📦 Starting MCP app (ports 9000/9001)..."
-screen -dmS mcp-app bash -c "cd '$PROJECT_DIR' && ./run-databricks-app-local.sh mcp_app 9000 9001 daveok $DEV_FLAG > mcp-app.log 2>&1"
+# Clear any inherited venv to use project's own venv
+screen -dmS mcp-app bash -c "unset VIRTUAL_ENV; export PATH=\"\$(echo \"\$PATH\" | tr ':' '\\n' | grep -v '.venv' | tr '\\n' ':')\"; cd '$PROJECT_DIR' && ./run-databricks-app-local.sh mcp_app 9000 9001 daveok $DEV_FLAG > mcp-app.log 2>&1"
 
 # Wait for MCP app first
 echo "⏳ Waiting for MCP app to initialize (up to 60s)..."
@@ -56,7 +57,8 @@ done
 
 echo ""
 echo "🎨 Starting UI app (ports 9002/9003)..."
-screen -dmS ui-app bash -c "cd '$PROJECT_DIR' && export MCP_SERVER_URL='http://localhost:9001' && ./run-databricks-app-local.sh ui_app 9002 9003 daveok $DEV_FLAG > ui-app.log 2>&1"
+# Clear any inherited venv to use project's own venv
+screen -dmS ui-app bash -c "unset VIRTUAL_ENV; export PATH=\"\$(echo \"\$PATH\" | tr ':' '\\n' | grep -v '.venv' | tr '\\n' ':')\"; cd '$PROJECT_DIR' && export MCP_SERVER_URL='http://localhost:9001' && ./run-databricks-app-local.sh ui_app 9002 9003 daveok $DEV_FLAG > ui-app.log 2>&1"
 
 echo ""
 echo "⏳ Waiting for UI app to initialize (up to 90s)..."
