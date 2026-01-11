@@ -15,6 +15,8 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "mlflow>=2.14.0",
     "openai>=1.0.0",
+    # Pin beartype to avoid internal API breakage with key_value/docket
+    "beartype>=0.18.0,<0.19.0",
 ]
 
 [build-system]
