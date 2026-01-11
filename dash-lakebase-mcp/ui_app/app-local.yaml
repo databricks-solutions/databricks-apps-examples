@@ -1,0 +1,9 @@
+# Configuration for LOCAL development of Range Optimizer Dash UI
+# Uses local MCP server instead of deployed one
+#
+# Usage: databricks apps run-local uses this when you specify --config app-local.yaml
+
+command: ["bash", "entrypoint.sh"]
+
+# Note: MCP_SERVER_URL is NOT set here - it will be injected via --env flag
+# This allows the local scripts to point to http://localhost:9001

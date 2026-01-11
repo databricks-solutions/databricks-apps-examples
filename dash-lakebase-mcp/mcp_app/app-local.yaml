@@ -1,0 +1,14 @@
+# Configuration for LOCAL development of Range Optimizer MCP Server
+# Database credentials are injected via --env flags from run-databricks-app-local.sh
+#
+# Usage: databricks apps run-local uses this when you specify --entry-point app-local.yaml
+
+command: ["bash", "entrypoint.sh"]
+
+env:
+  # Schema name for database tables
+  - name: LAKEBASE_SCHEMA
+    value: range_optimizer
+
+# Note: For local dev, database credentials come from --env flags
+# No resources section needed - we use environment variables directly
