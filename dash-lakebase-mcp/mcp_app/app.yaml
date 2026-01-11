@@ -10,6 +10,9 @@ env:
     value: range_optimizer
   - name: LAKEBASE_INSTANCE_NAME
     value: daveok
+  # MLflow experiment ID for tracing (injected from resource)
+  - name: MLFLOW_EXPERIMENT_ID
+    valueFrom: mlflow-experiment
 
 resources:
   # Database connection with elevated privileges for MCP tools
@@ -35,3 +38,9 @@ resources:
     serving_endpoint:
       name: databricks-claude-haiku-4-5 
       permission: CAN_QUERY
+  
+  # MLflow experiment for GenAI tracing
+  - name: mlflow-experiment
+    mlflow_experiment:
+      path: /Users/david.okeeffe@databricks.com/range-optimizer-mcp-traces
+      permission: CAN_EDIT

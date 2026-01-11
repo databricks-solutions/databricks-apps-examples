@@ -32,6 +32,16 @@ async def lifespan(app: FastAPI):
     # Enable MLflow GenAI Tracing for Foundation Models
     logger.info("Enabling MLflow GenAI tracing")
     try:
+        # Set experiment from environment variable (injected by Databricks Apps)
+        experiment_id = os.getenv("MLFLOW_EXPERIMENT_ID")
+        if experiment_id:
+            mlflow.set_experiment(experiment_id=experiment_id)
+            logger.info(f"MLflow experiment set to ID: {experiment_id}")
+        else:
+            # Fallback for local development
+            mlflow.set_experiment("/Users/david.okeeffe@databricks.com/range-optimizer-mcp-traces")
+            logger.info("MLflow experiment set to fallback path (local dev)")
+        
         # Using openai autolog as Databricks FM uses openai-compatible interface
         mlflow.openai.autolog()
     except Exception as e:
