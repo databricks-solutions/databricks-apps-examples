@@ -1,13 +1,13 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 🚀 Deploy Stock Optimization Serving Endpoint
+# MAGIC # 🚀 Deploy Range Optimizer Serving Endpoint
 # MAGIC 
-# MAGIC This notebook deploys the registered Stock Optimization model with **Feature Store integration** to a **Model Serving endpoint** for real-time inference.
+# MAGIC This notebook deploys the registered Range Optimizer model with **Feature Store integration** to a **Model Serving endpoint** for real-time inference.
 # MAGIC 
-# MAGIC ## Key Features
-# MAGIC - Automatic feature lookup from Unity Catalog
-# MAGIC - Real-time optimization inference
-# MAGIC - Scalable serving with auto-scaling
+# MAGIC ## Schema Alignment
+# MAGIC The deployed model uses the MCP app's schema:
+# MAGIC - Input: `SKU_ID` (features auto-fetched from Feature Store)
+# MAGIC - Output: Facings recommendations, profit metrics, change types
 # MAGIC 
 # MAGIC ## Prerequisites
 # MAGIC - Feature tables created (`00_create_feature_tables`)
@@ -23,13 +23,13 @@
 
 # DBTITLE 1,Configuration
 # Must match the model from notebook 01
-CATALOG = "main"
+CATALOG = "smarter_forecasting"
 SCHEMA = "stock_optimization"
-MODEL_NAME = "stock_optimizer"
+MODEL_NAME = "range_optimizer"
 UC_MODEL_PATH = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
 # Serving endpoint settings
-ENDPOINT_NAME = "stock-optimization-model"
+ENDPOINT_NAME = "range-optimizer-model"
 WORKLOAD_SIZE = "Small"  # Small, Medium, or Large
 SCALE_TO_ZERO = True     # Scale to zero when idle (saves cost)
 
@@ -150,7 +150,7 @@ if endpoint.config and endpoint.config.served_entities:
 # MAGIC %md
 # MAGIC ## ✅ Test the Endpoint with Feature Store
 # MAGIC 
-# MAGIC **Important**: With Feature Store integration, we only need to provide `SELL_ID` and optionally `PRODUCT_NAME`.
+# MAGIC **Important**: With Feature Store integration, we only need to provide `SKU_ID` and optionally `SKU_NAME`.
 # MAGIC The endpoint will automatically fetch all other features from Unity Catalog!
 
 # COMMAND ----------
@@ -159,16 +159,16 @@ if endpoint.config and endpoint.config.served_entities:
 import pandas as pd
 import requests
 
-# Test with just product IDs - features will be fetched automatically!
+# Test with just SKU IDs - features will be fetched automatically!
 test_data = pd.DataFrame([
-    {'SELL_ID': 'SKU4001', 'PRODUCT_NAME': 'Stone & Wood Pacific Ale 6pk'},
-    {'SELL_ID': 'SKU4004', 'PRODUCT_NAME': 'White Claw Variety 12pk'},
-    {'SELL_ID': 'SKU4006', 'PRODUCT_NAME': 'Sriracha Original 455ml'},
-    {'SELL_ID': 'SKU4011', 'PRODUCT_NAME': "Ben & Jerry's Cookie Dough 458ml"},
-    {'SELL_ID': 'SKU4015', 'PRODUCT_NAME': 'Magnum Double Caramel 4pk'},
+    {'SKU_ID': 'SKU3001', 'SKU_NAME': 'Stone & Wood Pacific Ale 6pk', 'CURRENT_FACINGS': 3},
+    {'SKU_ID': 'SKU3009', 'SKU_NAME': 'White Claw Variety 12pk', 'CURRENT_FACINGS': 4},
+    {'SKU_ID': 'SKU4001', 'SKU_NAME': 'Sriracha Original 455ml', 'CURRENT_FACINGS': 4},
+    {'SKU_ID': 'SKU5001', 'SKU_NAME': "Ben & Jerry's Cookie Dough 458ml", 'CURRENT_FACINGS': 3},
+    {'SKU_ID': 'SKU5012', 'SKU_NAME': 'Magnum Classic 4pk', 'CURRENT_FACINGS': 2},
 ])
 
-print("📥 Test Data (only IDs - features auto-fetched):")
+print("📥 Test Data (SKU_IDs + current facings - other features auto-fetched):")
 display(test_data)
 
 # COMMAND ----------
@@ -207,12 +207,12 @@ if response.status_code == 200:
         result_df = pd.DataFrame([result])
     
     print("\n📤 Optimization Results:")
-    display(result_df[['SELL_ID', 'PRODUCT_NAME', 'OPTIMAL_ORDER_QTY', 'SAFETY_STOCK', 'REORDER_POINT', 'EXPECTED_ANNUAL_PROFIT']])
+    display(result_df[['SKU_ID', 'SKU_NAME', 'CURRENT_FACINGS', 'RECOMMENDED_FACINGS', 'FACINGS_CHANGE', 'CHANGE_TYPE', 'EXPECTED_WEEKLY_PROFIT']])
     
     print("\n💰 Summary:")
-    print(f"   Total Optimal Stock: {result_df['OPTIMAL_ORDER_QTY'].sum():,.0f} units")
-    print(f"   Total Safety Stock: {result_df['SAFETY_STOCK'].sum():,.0f} units")
-    print(f"   Total Expected Profit: ${result_df['EXPECTED_ANNUAL_PROFIT'].sum():,.2f}")
+    print(f"   Total Recommended Facings: {result_df['RECOMMENDED_FACINGS'].sum():.0f}")
+    print(f"   Total Weekly Profit: ${result_df['EXPECTED_WEEKLY_PROFIT'].sum():,.2f}")
+    print(f"   SKUs with Increased Facings: {len(result_df[result_df['CHANGE_TYPE'] == 'increased'])}")
 else:
     print(f"❌ Error: {response.status_code}")
     print(response.text)
@@ -220,24 +220,25 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 🧪 Test with Custom Feature Values
+# MAGIC ## 🧪 Test with What-If Scenarios
 # MAGIC 
-# MAGIC You can also override specific features by including them in the request:
+# MAGIC You can override specific features by including them in the request:
 
 # COMMAND ----------
 
-# DBTITLE 1,Test with Custom Overrides
-# Override demand forecasts for what-if analysis
+# DBTITLE 1,Test with What-If Overrides
+# Override demand for what-if analysis
 test_data_custom = pd.DataFrame([
     {
-        'SELL_ID': 'SKU4001',
-        'PRODUCT_NAME': 'Stone & Wood Pacific Ale 6pk',
-        'AVG_DAILY_DEMAND': 200.0,  # Override: What if demand increases?
-        'DEMAND_STD': 45.0           # Override: Higher volatility
+        'SKU_ID': 'SKU3001',
+        'SKU_NAME': 'Stone & Wood Pacific Ale 6pk',
+        'CURRENT_FACINGS': 3,
+        'WEEKLY_UNITS': 150.0,  # Override: What if demand increases?
+        'DEMAND_STD': 40.0      # Override: Higher volatility
     },
 ])
 
-print("📥 Test with Custom Feature Values:")
+print("📥 Test with Custom Feature Values (What-If):")
 display(test_data_custom)
 
 payload_custom = {
@@ -255,12 +256,12 @@ if response_custom.status_code == 200:
     else:
         result_custom_df = pd.DataFrame([result_custom])
     
-    print("\n📤 Optimization Results (with custom demand):")
-    display(result_custom_df[['SELL_ID', 'PRODUCT_NAME', 'AVG_DAILY_DEMAND', 'OPTIMAL_ORDER_QTY', 'SAFETY_STOCK']])
+    print("\n📤 What-If Results (with increased demand):")
+    display(result_custom_df[['SKU_ID', 'SKU_NAME', 'WEEKLY_UNITS', 'RECOMMENDED_FACINGS', 'EXPECTED_WEEKLY_PROFIT']])
     
     print("\n💡 Impact of Demand Increase:")
-    print(f"   Optimal Order Qty: {result_custom_df['OPTIMAL_ORDER_QTY'].iloc[0]:,.0f} units")
-    print(f"   Safety Stock: {result_custom_df['SAFETY_STOCK'].iloc[0]:,.0f} units")
+    print(f"   Recommended Facings: {result_custom_df['RECOMMENDED_FACINGS'].iloc[0]:.0f}")
+    print(f"   Expected Weekly Profit: ${result_custom_df['EXPECTED_WEEKLY_PROFIT'].iloc[0]:,.2f}")
 
 # COMMAND ----------
 
@@ -271,72 +272,61 @@ if response_custom.status_code == 200:
 # MAGIC 
 # MAGIC | Property | Value |
 # MAGIC |----------|-------|
-# MAGIC | Endpoint | `stock-optimization-model` |
-# MAGIC | Model | `main.stock_optimization.stock_optimizer` |
-# MAGIC | Version | `{use_version}` |
+# MAGIC | Endpoint | `range-optimizer-model` |
+# MAGIC | Model | `main.stock_optimization.range_optimizer` |
 # MAGIC | Feature Store | ✅ Enabled |
 # MAGIC 
 # MAGIC ### ✨ Key Features
 # MAGIC 
-# MAGIC 1. **Automatic Feature Lookup**: Only send `SELL_ID`, features fetched from UC
+# MAGIC 1. **Automatic Feature Lookup**: Only send `SKU_ID`, features fetched from UC
 # MAGIC 2. **Real-time Inference**: Low-latency predictions
 # MAGIC 3. **Auto-scaling**: Scales to zero when idle
-# MAGIC 4. **Feature Consistency**: Always uses latest feature definitions
 # MAGIC 
 # MAGIC ### Usage Examples
 # MAGIC 
 # MAGIC **Python (Minimal Input):**
 # MAGIC ```python
 # MAGIC import requests
+# MAGIC import pandas as pd
 # MAGIC 
-# MAGIC # Only need product IDs!
+# MAGIC # Only need SKU IDs!
 # MAGIC data = pd.DataFrame([
-# MAGIC     {'SELL_ID': 'SKU4001', 'PRODUCT_NAME': 'Stone & Wood Pacific Ale 6pk'},
-# MAGIC     {'SELL_ID': 'SKU4002', 'PRODUCT_NAME': 'Balter XPA 4pk'},
+# MAGIC     {'SKU_ID': 'SKU3001', 'SKU_NAME': 'Stone & Wood Pacific Ale 6pk', 'CURRENT_FACINGS': 3},
+# MAGIC     {'SKU_ID': 'SKU4001', 'SKU_NAME': 'Sriracha Original 455ml', 'CURRENT_FACINGS': 4},
 # MAGIC ])
 # MAGIC 
 # MAGIC response = requests.post(
-# MAGIC     f"{workspace_url}/serving-endpoints/stock-optimization-model/invocations",
+# MAGIC     f"{workspace_url}/serving-endpoints/range-optimizer-model/invocations",
 # MAGIC     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
 # MAGIC     json={"dataframe_records": data.to_dict(orient='records')}
 # MAGIC )
 # MAGIC results = response.json()
 # MAGIC ```
 # MAGIC 
-# MAGIC **Python (with Custom Overrides):**
-# MAGIC ```python
-# MAGIC # Override specific features for what-if analysis
-# MAGIC data = pd.DataFrame([{
-# MAGIC     'SELL_ID': 'SKU4001',
-# MAGIC     'AVG_DAILY_DEMAND': 250.0,  # What if demand increases?
-# MAGIC     'DEMAND_STD': 50.0           # With higher volatility?
-# MAGIC }])
-# MAGIC 
-# MAGIC response = requests.post(endpoint_url, json={"dataframe_records": data.to_dict(orient='records')})
+# MAGIC **Output Schema:**
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "SKU_ID": "SKU3001",
+# MAGIC   "SKU_NAME": "Stone & Wood Pacific Ale 6pk",
+# MAGIC   "CATEGORY": "Beer & Seltzer",
+# MAGIC   "RECOMMENDED_FACINGS": 4,
+# MAGIC   "FACINGS_CHANGE": 1,
+# MAGIC   "CHANGE_TYPE": "increased",
+# MAGIC   "EXPECTED_WEEKLY_PROFIT": 816.00,
+# MAGIC   "IS_RANGED": true
+# MAGIC }
 # MAGIC ```
 # MAGIC 
-# MAGIC **cURL:**
-# MAGIC ```bash
-# MAGIC curl -X POST \
-# MAGIC   -H "Authorization: Bearer $TOKEN" \
-# MAGIC   -H "Content-Type: application/json" \
-# MAGIC   -d '{"dataframe_records": [{"SELL_ID": "SKU4001", "PRODUCT_NAME": "Stone & Wood Pacific Ale 6pk"}]}' \
-# MAGIC   https://<workspace>/serving-endpoints/stock-optimization-model/invocations
-# MAGIC ```
+# MAGIC ### Next Steps
 # MAGIC 
-# MAGIC ### Monitoring
-# MAGIC 
-# MAGIC View endpoint metrics in:
-# MAGIC - **Serving UI**: Workspace → Serving → stock-optimization-model
-# MAGIC - **Metrics**: Request rate, latency, error rate
-# MAGIC - **Logs**: Request/response logs
+# MAGIC 1. **Test with MCP App**: Point UI to this endpoint
+# MAGIC 2. **Monitor**: View metrics in Serving UI
+# MAGIC 3. **Analyze Results**: Run `03_analyze_optimization_results` notebook
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## 🗑️ Cleanup (Optional)
-# MAGIC 
-# MAGIC Uncomment to delete the endpoint:
 
 # COMMAND ----------
 

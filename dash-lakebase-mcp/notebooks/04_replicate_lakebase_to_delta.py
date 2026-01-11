@@ -46,7 +46,7 @@ SOURCE_TABLE = "sku_data"
 SOURCE_FULL_PATH = f"{SOURCE_CATALOG}.{SOURCE_SCHEMA}.{SOURCE_TABLE}"
 
 # Target: Delta Lake in Unity Catalog
-TARGET_CATALOG = "main"  # Or your preferred catalog
+TARGET_CATALOG = "smarter_forecasting"  # Or your preferred catalog
 TARGET_SCHEMA = "range_optimizer"
 TARGET_TABLE = "delta_sku_data"
 TARGET_FULL_PATH = f"{TARGET_CATALOG}.{TARGET_SCHEMA}.{TARGET_TABLE}"

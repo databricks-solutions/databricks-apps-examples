@@ -7,7 +7,7 @@ include:
 variables:
   catalog:
     description: Unity Catalog name
-    default: main
+    default: smarter_forecasting
   
   schema:
     description: Schema name for features and models
@@ -186,6 +186,8 @@ targets:
   dev:
     mode: development
     default: true
+    workspace:
+      host: https://adb-7405614596482958.18.azuredatabricks.net
 
   prod:
     mode: production

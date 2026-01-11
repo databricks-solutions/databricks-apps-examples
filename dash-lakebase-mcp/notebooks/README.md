@@ -118,7 +118,7 @@ Analyzes optimization results and compares scenarios:
 Edit the configuration in each notebook:
 
 ```python
-CATALOG = "main"                    # Your Unity Catalog name
+CATALOG = "smarter_forecasting"     # Your Unity Catalog name
 SCHEMA = "stock_optimization"       # Schema name
 MODEL_NAME = "stock_optimizer"      # Model name
 ```

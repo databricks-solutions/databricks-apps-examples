@@ -27,7 +27,7 @@ import pandas as pd
 import numpy as np
 
 # Configure Unity Catalog
-CATALOG = "main"
+CATALOG = "smarter_forecasting"
 SCHEMA = "stock_optimization"
 MODEL_NAME = "stock_optimizer"
 UC_MODEL_PATH = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"

@@ -1,17 +1,20 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 🏪 Stock Optimization Model - Training with Feature Store
+# MAGIC # 🏪 Range Optimizer Model - Training with Feature Store
 # MAGIC 
-# MAGIC This notebook trains and registers a **Stock Optimization** model to **Unity Catalog** using **Feature Store** integration.
+# MAGIC This notebook trains and registers a **Range Optimizer** model to **Unity Catalog** using **Feature Store** integration.
 # MAGIC 
-# MAGIC The model uses **Economic Order Quantity (EOQ)** calculations with safety stock to optimize inventory levels.
+# MAGIC ## Schema Alignment
+# MAGIC This model is **aligned** with the MCP app's schema:
+# MAGIC - Primary Key: `SKU_ID` (e.g., "SKU3001")
+# MAGIC - Input: `SKU_ID`, `SKU_NAME`, `WEEKLY_UNITS`, `DEMAND_STD`, `UNIT_COST`, `UNIT_PRICE`
+# MAGIC - Output: Optimization results including facings recommendations
 # MAGIC 
 # MAGIC ## What You'll Learn
 # MAGIC - Create training sets with FeatureLookup from Unity Catalog
 # MAGIC - Train classical ML models with Feature Store integration
 # MAGIC - Register models to Unity Catalog with feature metadata
 # MAGIC - Set model aliases for deployment
-# MAGIC - Track feature lineage automatically
 # MAGIC 
 # MAGIC ## Prerequisites
 # MAGIC - Run `00_create_feature_tables` notebook first to create feature tables
@@ -24,18 +27,18 @@
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
-CATALOG = "main"                    # Your Unity Catalog name
+CATALOG = "smarter_forecasting"     # Your Unity Catalog name
 SCHEMA = "stock_optimization"       # Schema for features and models
-MODEL_NAME = "stock_optimizer"      # Model name
+MODEL_NAME = "range_optimizer"      # Model name
 
 # Feature tables (created in notebook 00)
-PRODUCT_FEATURES_TABLE = f"{CATALOG}.{SCHEMA}.product_features"
+SKU_FEATURES_TABLE = f"{CATALOG}.{SCHEMA}.sku_features"
 DEMAND_FEATURES_TABLE = f"{CATALOG}.{SCHEMA}.demand_features"
 
 # Full UC path
 UC_MODEL_PATH = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
-print(f"📊 Product Features: {PRODUCT_FEATURES_TABLE}")
+print(f"📊 SKU Features: {SKU_FEATURES_TABLE}")
 print(f"📈 Demand Features: {DEMAND_FEATURES_TABLE}")
 print(f"📦 Model will be registered to: {UC_MODEL_PATH}")
 
@@ -84,57 +87,66 @@ print("✅ Feature Engineering Client initialized")
 # MAGIC %md
 # MAGIC ## ⚙️ Model Configuration
 # MAGIC 
-# MAGIC These parameters control the EOQ optimization algorithm:
+# MAGIC These parameters control the range optimization algorithm:
 
 # COMMAND ----------
 
 # DBTITLE 1,Optimization Parameters
 @dataclass
 class OptimizationConfig:
-    """Configuration for stock optimization algorithm"""
-    holding_cost_rate: float = 0.25    # 25% annual holding cost
-    ordering_cost: float = 50.0        # $50 per order
-    lead_time_days: int = 7            # 7 days to restock
-    service_level: float = 0.95        # 95% service level target
-    safety_factor: float = 1.65        # Z-score for 95% confidence
-    max_storage_capacity: int = 10000  # Max units storable
+    """Configuration for range optimization algorithm"""
+    min_facings: int = 1              # Minimum facings per SKU
+    max_facings: int = 6              # Maximum facings per SKU
+    target_service_level: float = 0.95  # 95% service level target
+    safety_factor: float = 1.65       # Z-score for 95% confidence
+    weekly_to_annual: float = 52.0    # Convert weekly to annual
+    holding_cost_rate: float = 0.25   # 25% annual holding cost
+    ordering_cost: float = 50.0       # $50 per order
+    lead_time_days: int = 7           # 7 days to restock
 
 config = OptimizationConfig()
 
 print("⚙️ Optimization Parameters:")
-print(f"   • Holding Cost Rate: {config.holding_cost_rate*100}%/year")
-print(f"   • Ordering Cost: ${config.ordering_cost} per order")
-print(f"   • Lead Time: {config.lead_time_days} days")
-print(f"   • Service Level: {config.service_level*100}%")
+print(f"   • Min Facings: {config.min_facings}")
+print(f"   • Max Facings: {config.max_facings}")
+print(f"   • Service Level: {config.target_service_level*100}%")
 print(f"   • Safety Factor (Z): {config.safety_factor}")
+print(f"   • Lead Time: {config.lead_time_days} days")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## 🧠 Model Implementation
 # MAGIC 
-# MAGIC The `StockOptimizerModel` implements the EOQ formula:
-# MAGIC 
-# MAGIC $$EOQ = \sqrt{\frac{2 \times D \times S}{H \times C}}$$
-# MAGIC 
-# MAGIC Where:
-# MAGIC - **D** = Annual demand
-# MAGIC - **S** = Ordering cost per order
-# MAGIC - **H** = Holding cost rate
-# MAGIC - **C** = Unit cost
+# MAGIC The `RangeOptimizerModel` calculates optimal facings based on:
+# MAGIC - Weekly demand and volatility
+# MAGIC - Margin contribution per facing
+# MAGIC - Safety stock requirements
 
 # COMMAND ----------
 
-# DBTITLE 1,Stock Optimizer Model Class
-class StockOptimizerModel(mlflow.pyfunc.PythonModel):
+# DBTITLE 1,Range Optimizer Model Class
+class RangeOptimizerModel(mlflow.pyfunc.PythonModel):
     """
-    MLflow pyfunc model for stock optimization using EOQ.
+    MLflow pyfunc model for range optimization.
     
-    This model integrates with Feature Store to automatically retrieve
-    product and demand features during training and inference.
+    Aligned with MCP app schema:
+    - Input: DataFrame with SKU_ID (features auto-fetched from Feature Store)
+    - Output: DataFrame with optimization results
     
-    Input: DataFrame with SELL_ID (and optionally feature values)
-    Output: DataFrame with optimization results including OPTIMAL_ORDER_QTY, SAFETY_STOCK, etc.
+    Expected input columns (from Feature Store):
+    - SKU_ID: Product identifier (required - primary key)
+    - SKU_NAME: Product name
+    - WEEKLY_UNITS: Average weekly demand
+    - DEMAND_STD: Standard deviation of demand
+    - UNIT_COST: Cost per unit
+    - UNIT_PRICE: Selling price per unit
+    - CATEGORY: Product category
+    - SEGMENT: Product segment
+    - BRAND: Brand name
+    - PACK_WIDTH_MM: Shelf space width
+    - IS_MUST_STOCK: Whether item must be stocked
+    - IS_PRIVATE_LABEL: Whether item is private label
     """
     
     def __init__(self, config: Optional[OptimizationConfig] = None):
@@ -149,85 +161,119 @@ class StockOptimizerModel(mlflow.pyfunc.PythonModel):
         else:
             self.config = OptimizationConfig()
     
-    def calculate_eoq(self, annual_demand, ordering_cost, unit_cost, holding_cost_rate):
-        """Economic Order Quantity formula"""
-        if annual_demand <= 0 or unit_cost <= 0:
-            return 0.0
-        return np.sqrt((2 * annual_demand * ordering_cost) / (holding_cost_rate * unit_cost))
-    
-    def calculate_safety_stock(self, demand_std, lead_time_days, safety_factor):
-        """Safety stock = Z × σ × √L"""
-        if demand_std <= 0:
-            return 0.0
-        return safety_factor * demand_std * np.sqrt(lead_time_days)
+    def calculate_optimal_facings(self, weekly_units, demand_std, margin, is_must_stock):
+        """
+        Calculate optimal facings based on demand and profitability.
+        
+        Uses a simplified space productivity formula:
+        - Higher weekly profit → more facings
+        - Higher volatility → more safety stock → more facings
+        """
+        if weekly_units <= 0 or margin <= 0:
+            return self.config.min_facings if is_must_stock else 0
+        
+        # Weekly profit per unit
+        weekly_profit = weekly_units * margin
+        
+        # Safety stock multiplier
+        safety_multiplier = 1 + (demand_std / weekly_units) if weekly_units > 0 else 1
+        
+        # Space productivity score (profit per unit, adjusted for volatility)
+        productivity_score = weekly_profit / safety_multiplier
+        
+        # Convert productivity to facings recommendation
+        if productivity_score > 200:
+            recommended = 5
+        elif productivity_score > 100:
+            recommended = 4
+        elif productivity_score > 50:
+            recommended = 3
+        elif productivity_score > 25:
+            recommended = 2
+        else:
+            recommended = 1 if is_must_stock else 0
+        
+        # Apply constraints
+        return max(
+            self.config.min_facings if is_must_stock else 0,
+            min(recommended, self.config.max_facings)
+        )
     
     def predict(self, context, model_input: pd.DataFrame) -> pd.DataFrame:
         """
-        Run optimization on input products.
+        Run optimization on input SKUs.
         
-        Expected input columns (automatically joined from Feature Store if using fe.log_model):
-        - SELL_ID: Product identifier (required - primary key)
-        - AVG_DAILY_DEMAND: Average daily demand (from feature store)
-        - DEMAND_STD: Standard deviation of demand (from feature store)
-        - UNIT_COST: Cost per unit (from feature store)
-        - SELLING_PRICE: Selling price per unit (from feature store)
+        Returns optimization results aligned with MCP app opt_recommended_planogram schema.
         """
         results = []
         
         for _, row in model_input.iterrows():
-            sell_id = row.get('SELL_ID', 'UNKNOWN')
-            product_name = row.get('PRODUCT_NAME', 'Unknown')
-            avg_daily_demand = float(row.get('AVG_DAILY_DEMAND', 0))
-            demand_std = float(row.get('DEMAND_STD', avg_daily_demand * 0.2))
-            unit_cost = float(row.get('UNIT_COST', 10.0))
-            selling_price = float(row.get('SELLING_PRICE', unit_cost * 2))
+            # Extract values (handle both uppercase and lowercase)
+            sku_id = row.get('SKU_ID') or row.get('sku_id', 'UNKNOWN')
+            sku_name = row.get('SKU_NAME') or row.get('sku_name', 'Unknown')
+            category = row.get('CATEGORY') or row.get('category', 'Unknown')
+            segment = row.get('SEGMENT') or row.get('segment', 'Unknown')
+            brand = row.get('BRAND') or row.get('brand', 'Unknown')
             
-            annual_demand = avg_daily_demand * 365
+            weekly_units = float(row.get('WEEKLY_UNITS') or row.get('weekly_units', 50))
+            demand_std = float(row.get('DEMAND_STD') or row.get('demand_std', weekly_units * 0.2))
+            unit_cost = float(row.get('UNIT_COST') or row.get('unit_cost', 10.0))
+            unit_price = float(row.get('UNIT_PRICE') or row.get('unit_price', unit_cost * 1.5))
+            pack_width = int(row.get('PACK_WIDTH_MM') or row.get('pack_width_mm', 100))
+            is_must_stock = bool(row.get('IS_MUST_STOCK') or row.get('is_must_stock', False))
+            is_private_label = bool(row.get('IS_PRIVATE_LABEL') or row.get('is_private_label', False))
+            current_facings = int(row.get('CURRENT_FACINGS') or row.get('current_facings', 2))
             
-            # EOQ calculation
-            eoq = self.calculate_eoq(
-                annual_demand, self.config.ordering_cost,
-                unit_cost, self.config.holding_cost_rate
+            # Calculate margin
+            margin = unit_price - unit_cost
+            
+            # Calculate optimal facings
+            recommended_facings = self.calculate_optimal_facings(
+                weekly_units, demand_std, margin, is_must_stock
             )
             
-            # Safety stock
-            safety_stock = self.calculate_safety_stock(
-                demand_std, self.config.lead_time_days, self.config.safety_factor
-            )
+            # Calculate facings change
+            facings_change = recommended_facings - current_facings
             
-            # Reorder point
-            reorder_point = (avg_daily_demand * self.config.lead_time_days) + safety_stock
+            # Determine change type
+            if current_facings == 0 and recommended_facings > 0:
+                change_type = "new"
+            elif recommended_facings == 0 and current_facings > 0:
+                change_type = "removed"
+            elif facings_change > 0:
+                change_type = "increased"
+            elif facings_change < 0:
+                change_type = "decreased"
+            else:
+                change_type = "no_change"
             
-            # Apply capacity limit
-            optimal_order_qty = min(eoq, self.config.max_storage_capacity)
-            max_stock_level = optimal_order_qty + safety_stock
-            
-            # Cost calculations
-            avg_inventory = optimal_order_qty / 2 + safety_stock
-            annual_holding_cost = avg_inventory * unit_cost * self.config.holding_cost_rate
-            annual_ordering_cost = (annual_demand / optimal_order_qty) * self.config.ordering_cost if optimal_order_qty > 0 else 0
-            total_annual_cost = annual_holding_cost + annual_ordering_cost
-            
-            # Profit calculations
-            expected_revenue = annual_demand * selling_price
-            expected_profit = expected_revenue - (annual_demand * unit_cost) - total_annual_cost
-            turnover_rate = annual_demand / max_stock_level if max_stock_level > 0 else 0
+            # Calculate expected metrics
+            expected_weekly_profit = weekly_units * margin
+            space_productivity = expected_weekly_profit / max(recommended_facings, 1)
+            is_ranged = recommended_facings > 0
             
             results.append({
-                'SELL_ID': sell_id,
-                'PRODUCT_NAME': product_name,
-                'AVG_DAILY_DEMAND': round(avg_daily_demand, 2),
-                'OPTIMAL_ORDER_QTY': round(optimal_order_qty, 0),
-                'SAFETY_STOCK': round(safety_stock, 0),
-                'REORDER_POINT': round(reorder_point, 0),
-                'MAX_STOCK_LEVEL': round(max_stock_level, 0),
-                'ANNUAL_HOLDING_COST': round(annual_holding_cost, 2),
-                'ANNUAL_ORDERING_COST': round(annual_ordering_cost, 2),
-                'TOTAL_ANNUAL_COST': round(total_annual_cost, 2),
-                'EXPECTED_ANNUAL_REVENUE': round(expected_revenue, 2),
-                'EXPECTED_ANNUAL_PROFIT': round(expected_profit, 2),
-                'TURNOVER_RATE': round(turnover_rate, 2),
-                'SERVICE_LEVEL': self.config.service_level,
+                'SKU_ID': sku_id,
+                'SKU_NAME': sku_name,
+                'CATEGORY': category,
+                'SEGMENT': segment,
+                'BRAND': brand,
+                'WEEKLY_UNITS': round(weekly_units, 2),
+                'UNIT_COST': round(unit_cost, 2),
+                'UNIT_PRICE': round(unit_price, 2),
+                'MARGIN': round(margin, 2),
+                'PACK_WIDTH_MM': pack_width,
+                'IS_MUST_STOCK': is_must_stock,
+                'IS_PRIVATE_LABEL': is_private_label,
+                'CURRENT_FACINGS': current_facings,
+                'RECOMMENDED_FACINGS': recommended_facings,
+                'FACINGS_CHANGE': facings_change,
+                'CHANGE_TYPE': change_type,
+                'IS_RANGED': is_ranged,
+                'EXPECTED_WEEKLY_UNITS': round(weekly_units, 0),
+                'EXPECTED_WEEKLY_PROFIT': round(expected_weekly_profit, 2),
+                'SPACE_PRODUCTIVITY': round(space_productivity, 2),
+                'SERVICE_LEVEL': self.config.target_service_level,
             })
         
         return pd.DataFrame(results)
@@ -238,24 +284,21 @@ print("✅ Model class defined")
 
 # MAGIC %md
 # MAGIC ## 📊 Create Training Set with Feature Lookups
-# MAGIC 
-# MAGIC We use **FeatureLookup** to automatically join features from Unity Catalog:
 
 # COMMAND ----------
 
 # DBTITLE 1,Load Base Training DataFrame
-# Create base DataFrame with product IDs and labels
-# In production, this would come from historical sales/inventory data
+# Create base DataFrame with SKU IDs
 base_training_df = spark.sql(f"""
     SELECT DISTINCT
-        d.SELL_ID,
-        p.PRODUCT_NAME,
-        p.CATEGORY_NAME
+        d.SKU_ID,
+        p.SKU_NAME,
+        p.CATEGORY
     FROM {DEMAND_FEATURES_TABLE} d
-    INNER JOIN {PRODUCT_FEATURES_TABLE} p ON d.SELL_ID = p.SELL_ID
+    INNER JOIN {SKU_FEATURES_TABLE} p ON d.SKU_ID = p.SKU_ID
 """)
 
-print(f"📊 Base training DataFrame: {base_training_df.count()} products")
+print(f"📊 Base training DataFrame: {base_training_df.count()} SKUs")
 display(base_training_df)
 
 # COMMAND ----------
@@ -263,22 +306,22 @@ display(base_training_df)
 # DBTITLE 1,Define Feature Lookups
 # Define which features to use from each feature table
 feature_lookups = [
-    # Product features: costs, pricing, and attributes
+    # SKU features: costs, pricing, and attributes
     FeatureLookup(
-        table_name=PRODUCT_FEATURES_TABLE,
-        feature_names=['UNIT_COST', 'SELLING_PRICE', 'CATEGORY_NAME', 'SUBCATEGORY_NAME', 'SHELF_SPACE_CM'],
-        lookup_key='SELL_ID',
+        table_name=SKU_FEATURES_TABLE,
+        feature_names=['UNIT_COST', 'UNIT_PRICE', 'CATEGORY', 'SEGMENT', 'BRAND', 'PACK_WIDTH_MM', 'IS_MUST_STOCK', 'IS_PRIVATE_LABEL'],
+        lookup_key='SKU_ID',
     ),
     # Demand features: forecasts and volatility
     FeatureLookup(
         table_name=DEMAND_FEATURES_TABLE,
-        feature_names=['AVG_DAILY_DEMAND', 'DEMAND_STD', 'TOTAL_FORECAST_30D'],
-        lookup_key='SELL_ID',
+        feature_names=['WEEKLY_UNITS', 'DEMAND_STD', 'FORECAST_4W'],
+        lookup_key='SKU_ID',
     )
 ]
 
 print("✅ Defined feature lookups:")
-print(f"   • {PRODUCT_FEATURES_TABLE}: 5 features")
+print(f"   • {SKU_FEATURES_TABLE}: 8 features")
 print(f"   • {DEMAND_FEATURES_TABLE}: 3 features")
 
 # COMMAND ----------
@@ -289,11 +332,14 @@ training_set = fe.create_training_set(
     df=base_training_df,
     feature_lookups=feature_lookups,
     label=None,  # Unsupervised optimization (no target label)
-    exclude_columns=['CATEGORY_NAME']  # Exclude as it's not needed for model
+    exclude_columns=['CATEGORY']  # Exclude duplicate column
 )
 
 # Load the training data
 training_df = training_set.load_df().toPandas()
+
+# Add default CURRENT_FACINGS for training (model will use this as baseline)
+training_df['CURRENT_FACINGS'] = 2
 
 print(f"✅ Training set created: {len(training_df)} rows")
 print(f"   Columns: {list(training_df.columns)}")
@@ -307,7 +353,7 @@ display(training_df.head())
 # COMMAND ----------
 
 # DBTITLE 1,Train and Get Signature
-model = StockOptimizerModel(config=config)
+model = RangeOptimizerModel(config=config)
 
 # Run inference to get output for signature
 print("→ Running model inference for signature...")
@@ -321,7 +367,7 @@ print(f"   Output features: {len(sample_output.columns)}")
 
 # Show sample results
 print("\n📤 Sample Optimization Results:")
-display(sample_output[['SELL_ID', 'PRODUCT_NAME', 'OPTIMAL_ORDER_QTY', 'SAFETY_STOCK', 'REORDER_POINT', 'EXPECTED_ANNUAL_PROFIT']].head())
+display(sample_output[['SKU_ID', 'SKU_NAME', 'RECOMMENDED_FACINGS', 'FACINGS_CHANGE', 'CHANGE_TYPE', 'EXPECTED_WEEKLY_PROFIT']].head())
 
 # COMMAND ----------
 
@@ -339,14 +385,12 @@ print(f"✅ Created {CATALOG}.{SCHEMA}")
 
 # MAGIC %md
 # MAGIC ## 🚀 Register Model to Unity Catalog with Feature Store
-# MAGIC 
-# MAGIC Using `fe.log_model()` instead of `mlflow.log_model()` to capture feature metadata:
 
 # COMMAND ----------
 
 # DBTITLE 1,Setup Experiment
 user = spark.conf.get('spark.databricks.workspace.user', 'unknown')
-experiment_name = f"/Users/{user}/stock_optimization_feature_store"
+experiment_name = f"/Users/{user}/range_optimization_feature_store"
 mlflow.set_experiment(experiment_name)
 print(f"📊 Experiment: {experiment_name}")
 
@@ -359,47 +403,42 @@ with tempfile.TemporaryDirectory() as tmpdir:
     with open(config_path, "w") as f:
         json.dump(asdict(config), f, indent=2)
     
-    with mlflow.start_run(run_name="stock_optimizer_with_features") as run:
+    with mlflow.start_run(run_name="range_optimizer_with_features") as run:
         run_id = run.info.run_id
         print(f"🏃 Run ID: {run_id}")
         
         # Log parameters
         mlflow.log_params({
-            "holding_cost_rate": config.holding_cost_rate,
-            "ordering_cost": config.ordering_cost,
-            "lead_time_days": config.lead_time_days,
-            "service_level": config.service_level,
+            "min_facings": config.min_facings,
+            "max_facings": config.max_facings,
+            "target_service_level": config.target_service_level,
             "safety_factor": config.safety_factor,
-            "num_products": len(training_df),
+            "num_skus": len(training_df),
         })
         
         # Log metrics
         mlflow.log_metrics({
-            "total_products": len(sample_output),
-            "avg_optimal_order_qty": sample_output['OPTIMAL_ORDER_QTY'].mean(),
-            "total_annual_cost": sample_output['TOTAL_ANNUAL_COST'].sum(),
-            "total_annual_profit": sample_output['EXPECTED_ANNUAL_PROFIT'].sum(),
-            "avg_turnover_rate": sample_output['TURNOVER_RATE'].mean(),
+            "total_skus": len(sample_output),
+            "skus_ranged": int(sample_output['IS_RANGED'].sum()),
+            "total_facings": float(sample_output['RECOMMENDED_FACINGS'].sum()),
+            "total_weekly_profit": float(sample_output['EXPECTED_WEEKLY_PROFIT'].sum()),
+            "avg_space_productivity": float(sample_output['SPACE_PRODUCTIVITY'].mean()),
         })
         
         # Log metrics by category  
-        category_products = spark.table(PRODUCT_FEATURES_TABLE).select('SELL_ID', 'CATEGORY_NAME').toPandas()
-        sample_with_cat = sample_output.merge(category_products, on='SELL_ID', how='left')
-        
-        for category in sample_with_cat['CATEGORY_NAME'].dropna().unique():
-            cat_data = sample_with_cat[sample_with_cat['CATEGORY_NAME'] == category]
+        for category in sample_output['CATEGORY'].dropna().unique():
+            cat_data = sample_output[sample_output['CATEGORY'] == category]
             cat_key = category.lower().replace(' ', '_').replace('&', 'and')
-            mlflow.log_metric(f"{cat_key}_total_cost", cat_data['TOTAL_ANNUAL_COST'].sum())
-            mlflow.log_metric(f"{cat_key}_total_profit", cat_data['EXPECTED_ANNUAL_PROFIT'].sum())
+            mlflow.log_metric(f"{cat_key}_total_facings", cat_data['RECOMMENDED_FACINGS'].sum())
+            mlflow.log_metric(f"{cat_key}_total_profit", cat_data['EXPECTED_WEEKLY_PROFIT'].sum())
         
-        # ⭐ KEY: Use fe.log_model() instead of mlflow.log_model()
-        # This captures the feature store metadata for automatic feature lookup
+        # Use fe.log_model() to capture feature store metadata
         print("📤 Registering model to Unity Catalog with Feature Store metadata...")
         model_info = fe.log_model(
-            model=StockOptimizerModel(config=config),
-            artifact_path="stock_optimizer",
+            model=RangeOptimizerModel(config=config),
+            artifact_path="range_optimizer",
             flavor=mlflow.pyfunc,
-            training_set=training_set,  # ⭐ This links the model to features
+            training_set=training_set,
             signature=signature,
             input_example=training_df.head(3),
             pip_requirements=["numpy", "pandas"],
@@ -442,17 +481,17 @@ if versions:
 # Load model from Unity Catalog
 loaded_model = mlflow.pyfunc.load_model(f"models:/{UC_MODEL_PATH}@production")
 
-# Test with just SELL_IDs - features will be automatically retrieved!
-test_data = training_df[['SELL_ID', 'PRODUCT_NAME']].head(5)
+# Test with just SKU_IDs - features will be automatically retrieved!
+test_data = training_df[['SKU_ID', 'SKU_NAME']].head(5)
 
-print("📥 Test Input (only SELL_IDs):")
+print("📥 Test Input (only SKU_IDs):")
 display(test_data)
 
 # Model will automatically fetch features from Feature Store
 predictions = loaded_model.predict(training_df.head(5))
 
 print("\n📤 Optimization Results (with auto-fetched features):")
-display(predictions[['SELL_ID', 'PRODUCT_NAME', 'OPTIMAL_ORDER_QTY', 'SAFETY_STOCK', 'REORDER_POINT', 'EXPECTED_ANNUAL_PROFIT']])
+display(predictions[['SKU_ID', 'SKU_NAME', 'RECOMMENDED_FACINGS', 'FACINGS_CHANGE', 'CHANGE_TYPE', 'EXPECTED_WEEKLY_PROFIT']])
 
 # COMMAND ----------
 
@@ -461,28 +500,32 @@ display(predictions[['SELL_ID', 'PRODUCT_NAME', 'OPTIMAL_ORDER_QTY', 'SAFETY_STO
 
 # COMMAND ----------
 
-# DBTITLE 1,Financial Summary
+# DBTITLE 1,Optimization Summary
 print("="*60)
 print("💰 OPTIMIZATION RESULTS")
 print("="*60)
-print(f"\n📊 Financial Overview:")
-print(f"   Total Annual Cost:    ${sample_output['TOTAL_ANNUAL_COST'].sum():>12,.2f}")
-print(f"   Total Annual Revenue: ${sample_output['EXPECTED_ANNUAL_REVENUE'].sum():>12,.2f}")
-print(f"   Total Annual Profit:  ${sample_output['EXPECTED_ANNUAL_PROFIT'].sum():>12,.2f}")
-print(f"\n📦 Inventory Overview:")
-print(f"   Total Optimal Stock:  {sample_output['OPTIMAL_ORDER_QTY'].sum():>12,.0f} units")
-print(f"   Total Safety Stock:   {sample_output['SAFETY_STOCK'].sum():>12,.0f} units")
-print(f"   Avg Turnover Rate:    {sample_output['TURNOVER_RATE'].mean():>12.1f}x")
+print(f"\n📊 Overall Summary:")
+print(f"   Total SKUs: {len(sample_output)}")
+print(f"   SKUs Ranged: {sample_output['IS_RANGED'].sum()}")
+print(f"   Total Facings: {sample_output['RECOMMENDED_FACINGS'].sum():.0f}")
+print(f"   Total Weekly Profit: ${sample_output['EXPECTED_WEEKLY_PROFIT'].sum():,.2f}")
+print(f"   Avg Space Productivity: ${sample_output['SPACE_PRODUCTIVITY'].mean():.2f}")
+
+# By change type
+print(f"\n📋 Changes Summary:")
+for change_type in ['increased', 'decreased', 'no_change', 'new', 'removed']:
+    count = len(sample_output[sample_output['CHANGE_TYPE'] == change_type])
+    if count > 0:
+        print(f"   • {change_type.title()}: {count} SKUs")
 
 # By category
 print(f"\n📁 Results by Category:")
-for category in sample_with_cat['CATEGORY_NAME'].dropna().unique():
-    cat_data = sample_with_cat[sample_with_cat['CATEGORY_NAME'] == category]
+for category in sample_output['CATEGORY'].dropna().unique():
+    cat_data = sample_output[sample_output['CATEGORY'] == category]
     print(f"\n   {category}:")
-    print(f"      Products: {len(cat_data)}")
-    print(f"      Total Stock: {cat_data['OPTIMAL_ORDER_QTY'].sum():,.0f} units")
-    print(f"      Annual Cost: ${cat_data['TOTAL_ANNUAL_COST'].sum():,.2f}")
-    print(f"      Annual Profit: ${cat_data['EXPECTED_ANNUAL_PROFIT'].sum():,.2f}")
+    print(f"      SKUs: {len(cat_data)}")
+    print(f"      Total Facings: {cat_data['RECOMMENDED_FACINGS'].sum():.0f}")
+    print(f"      Weekly Profit: ${cat_data['EXPECTED_WEEKLY_PROFIT'].sum():,.2f}")
 
 # COMMAND ----------
 
@@ -493,48 +536,33 @@ for category in sample_with_cat['CATEGORY_NAME'].dropna().unique():
 # MAGIC 
 # MAGIC | Property | Value |
 # MAGIC |----------|-------|
-# MAGIC | Model Path | `{UC_MODEL_PATH}` |
+# MAGIC | Model Path | `main.stock_optimization.range_optimizer` |
 # MAGIC | Aliases | `@production`, `@champion` |
-# MAGIC | Product Features | `{PRODUCT_FEATURES_TABLE}` |
-# MAGIC | Demand Features | `{DEMAND_FEATURES_TABLE}` |
+# MAGIC | SKU Features | `main.stock_optimization.sku_features` |
+# MAGIC | Demand Features | `main.stock_optimization.demand_features` |
 # MAGIC 
-# MAGIC ### ✨ Key Benefits
+# MAGIC ### ✨ Key Features
 # MAGIC 
 # MAGIC 1. **Automatic Feature Lookup**: Model automatically retrieves features during inference
-# MAGIC 2. **Feature Lineage**: View complete lineage in Catalog Explorer
+# MAGIC 2. **Schema Aligned**: Input/output matches MCP app expectations
 # MAGIC 3. **Feature Governance**: Unity Catalog controls feature access
-# MAGIC 4. **Consistent Features**: Training and inference use identical feature definitions
+# MAGIC 
+# MAGIC ### Model Input/Output
+# MAGIC 
+# MAGIC **Input** (minimal - features auto-fetched):
+# MAGIC ```python
+# MAGIC input_df = pd.DataFrame([
+# MAGIC     {'SKU_ID': 'SKU3001', 'SKU_NAME': 'Stone & Wood Pacific Ale 6pk'},
+# MAGIC     {'SKU_ID': 'SKU4001', 'SKU_NAME': 'Sriracha Original 455ml'},
+# MAGIC ])
+# MAGIC ```
+# MAGIC 
+# MAGIC **Output**:
+# MAGIC - `SKU_ID`, `SKU_NAME`, `CATEGORY`, `SEGMENT`, `BRAND`
+# MAGIC - `RECOMMENDED_FACINGS`, `FACINGS_CHANGE`, `CHANGE_TYPE`
+# MAGIC - `EXPECTED_WEEKLY_PROFIT`, `SPACE_PRODUCTIVITY`, `IS_RANGED`
 # MAGIC 
 # MAGIC ### Next Steps
 # MAGIC 
 # MAGIC 1. **Deploy Serving Endpoint**: Run `02_deploy_serving_endpoint` notebook
-# MAGIC 2. **View Lineage**: Open Catalog Explorer → Models → `{UC_MODEL_PATH}` → Lineage tab
-# MAGIC 3. **Use in Production**:
-# MAGIC 
-# MAGIC ```python
-# MAGIC # Load model
-# MAGIC import mlflow
-# MAGIC mlflow.set_registry_uri("databricks-uc")
-# MAGIC model = mlflow.pyfunc.load_model(f"models:/{UC_MODEL_PATH}@production")
-# MAGIC 
-# MAGIC # Predict - features fetched automatically!
-# MAGIC results = model.predict(input_df[['SELL_ID', 'PRODUCT_NAME']])
-# MAGIC ```
-# MAGIC 
-# MAGIC ### Updating Features
-# MAGIC 
-# MAGIC When demand forecasts change, update the feature table:
-# MAGIC 
-# MAGIC ```python
-# MAGIC from databricks.feature_engineering import FeatureEngineeringClient
-# MAGIC fe = FeatureEngineeringClient()
-# MAGIC 
-# MAGIC # Update demand features
-# MAGIC fe.write_table(
-# MAGIC     name="{DEMAND_FEATURES_TABLE}",
-# MAGIC     df=new_forecasts_df,
-# MAGIC     mode='merge'
-# MAGIC )
-# MAGIC 
-# MAGIC # Model will automatically use updated features!
-# MAGIC ```
+# MAGIC 2. **View Lineage**: Open Catalog Explorer → Models → range_optimizer → Lineage tab
