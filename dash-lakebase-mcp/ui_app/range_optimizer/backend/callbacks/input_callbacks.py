@@ -26,6 +26,7 @@ from ..mcp_client import get_skus, save_skus, submit_optimization_run, validate_
 from ..components.input import (
     CSV_TO_GRID_COL_MAP,
     COLUMN_DEFS,
+    EDITABLE_FIELDS,
 )
 
 
@@ -359,8 +360,12 @@ def update_column_defs(store_data: Optional[List[Dict[str, Any]]]) -> List[Dict[
 
     for col in defs:
         field = col.get("field")
-        if field == "STATUS":
+        # Make all EDITABLE_FIELDS editable
+        if field in EDITABLE_FIELDS:
             col["editable"] = True
+        
+        # Special handling for STATUS dropdown
+        if field == "STATUS":
             col["cellEditor"] = "agSelectCellEditor"
             col["cellEditorParams"] = {"values": status_options}
             col["filter"] = "agTextColumnFilter"
@@ -456,11 +461,11 @@ def update_grid_by_category(
 @callback(
     Output("grid-data-store", "data", allow_duplicate=True),
     Input("ag-grid-table", "cellValueChanged"),
-    State("ag-grid-table", "rowData"),
+    State("grid-data-store", "data"),  # Use store data, not grid rowData (which can be stale)
     prevent_initial_call=True,
 )
 def update_store_on_cell_change(
-    cell_changed: Dict[str, Any], row_data: List[Dict[str, Any]]
+    cell_changed: Dict[str, Any], store_data: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """Validate and update store on cell edit."""
 
@@ -477,8 +482,8 @@ def update_store_on_cell_change(
             return None
         return parsed
 
-    if not cell_changed or not row_data:
-        return row_data
+    if not cell_changed or not store_data:
+        return store_data or []
 
     def apply_change(change: Dict[str, Any], rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not isinstance(change, dict):
@@ -529,7 +534,7 @@ def update_store_on_cell_change(
     log("CALLBACK: update_store_on_cell_change")
     log(f"Cell changed: {cell_changed}")
 
-    updated = row_data
+    updated = store_data
     for change in changes:
         updated = apply_change(change, updated)
 
