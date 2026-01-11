@@ -2,17 +2,12 @@
 # Entrypoint for Databricks Apps deployment
 set -e
 
-# Debug: Print database environment variables (Databricks injects these automatically)
-echo "Database configuration:"
-echo "  PGHOST: ${PGHOST:-<not set>}"
-echo "  PGDATABASE: ${PGDATABASE:-<not set>}"
-echo "  PGUSER: ${PGUSER:-<not set>}"
-echo "  PGPORT: ${PGPORT:-5432}"
-echo "  PGSSLMODE: ${PGSSLMODE:-require}"
+# UI app uses MCP server for all data operations (no direct DB access)
+echo "MCP Server URL: ${MCP_SERVER_URL:-<not set>}"
 
 # Databricks Apps expect port 8000 by default
 APP_PORT=${APP_PORT:-8000}
-echo "Starting app on port: $APP_PORT"
+echo "Starting Range Optimizer UI on port: $APP_PORT"
 
 # Check for DEV_MODE to enable hot reload
 if [ "${DEV_MODE:-false}" = "true" ]; then

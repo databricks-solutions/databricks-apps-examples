@@ -30,8 +30,8 @@ echo ""
 echo "🚀 Triggering app deployments..."
 
 # Trigger actual app deployments
-databricks apps deploy range-opt-mcp-daveok
-databricks apps deploy range-opt-ui-daveok
+databricks bundle run range_optimizer_ui
+databricks bundle run range_optimizer_mcp
 
 echo ""
 echo "✅ Deployment complete!"

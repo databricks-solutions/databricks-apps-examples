@@ -40,7 +40,8 @@ resources:
       permission: CAN_QUERY
   
   # MLflow experiment for GenAI tracing
+  # Note: Must use /Shared/ path so the app's service principal can access it
   - name: mlflow-experiment
     mlflow_experiment:
-      path: /Users/david.okeeffe@databricks.com/range-optimizer-mcp-traces
+      path: /Shared/range-optimizer-mcp-traces
       permission: CAN_EDIT
