@@ -77,14 +77,21 @@ layout = dbc.Container(
                                 ),
                                 dmc.Paper(
                                     children=[
-                                        dmc.Image(
-                                            src="/assets/architecture.png",
-                                            fit="contain",
-                                            w="100%",
+                                        html.Div(
+                                            dmc.Image(
+                                                src="/assets/architecture.png",
+                                                fit="contain",
+                                                style={"maxHeight": "70vh"},
+                                            ),
+                                            style={
+                                                "overflowX": "auto",
+                                                "display": "flex",
+                                                "justifyContent": "center",
+                                            },
                                         ),
                                     ],
                                     shadow="sm",
-                                    p="lg",
+                                    p="md",
                                     radius="md",
                                     withBorder=True,
                                     style={"backgroundColor": "#FAFAFA"},

@@ -296,7 +296,8 @@ def validate_grid(store_data: List[Dict[str, Any]]) -> Tuple[bool, dmc.Stack, Li
     prevent_initial_call=True,
     background=True,
     running=[
-        (Output("submission-progress-container", "style"), {"display": "block", "marginTop": "20px"}, {"display": "none"}),
+        (Output("submission-progress-container", "style"), {"display": "block", "marginBottom": "15px"}, {"display": "none"}),
+        (Output("null-description-box-wrapper", "style"), {"display": "none"}, {"display": "block"}),  # Hide validation during submission
         (Output("submit-button", "disabled"), True, False),
         (Output("reset-button", "disabled"), True, False),
         (Output("delete-button", "disabled"), True, False),
@@ -326,7 +327,7 @@ def submit_range_optimization(
     _, has_critical_errors, _ = build_validation_summary(data_for_validation)
     
     hidden_style = {"display": "none"}
-    visible_style = {"display": "block", "marginTop": "20px"}
+    visible_style = {"display": "block", "marginBottom": "15px"}
 
     if has_critical_errors:
         log("→ Blocking submit due to validation errors")

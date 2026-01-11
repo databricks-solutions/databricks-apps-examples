@@ -438,7 +438,15 @@ def render_input_grid() -> html.Div:
     )
 
     description_box = html.Div(
-        get_null_description(data=None), id="null-description-box"
+        get_null_description(data=None), 
+        id="null-description-box",
+    )
+    
+    # Wrapper to control visibility during submission (separate from content updates)
+    description_box_wrapper = html.Div(
+        description_box,
+        id="null-description-box-wrapper",
+        style={"display": "block"},  # Controlled by running state during submission
     )
 
     info_box = html.Div(get_null_description(data=None), id="info-box")
@@ -567,7 +575,7 @@ def render_input_grid() -> html.Div:
                 style={"backgroundColor": "#fff5f5", "borderColor": "#E21837"},
             ),
         ],
-        style={"display": "none", "marginTop": "20px"},
+        style={"display": "none", "marginBottom": "15px"},
     )
     
     # Navigation card that appears after submission
@@ -617,7 +625,10 @@ def render_input_grid() -> html.Div:
             constraints_card,
             dmc.Space(h=10),
             data_overlay,
-            description_box,
+            description_box_wrapper,  # Wrapper controls visibility during submission
+            # Submission progress and results nav - placed above grid for visibility
+            submission_progress,
+            results_nav_card,
             grid,
             dmc.Space(h=10),
             dmc.Group(
@@ -630,10 +641,6 @@ def render_input_grid() -> html.Div:
                     overwrite_switch,
                 ]
             ),
-            # Submission progress (shown during processing)
-            submission_progress,
-            # Navigation to results appears after submission
-            results_nav_card,
         ],
         style={"position": "relative"}
     )
