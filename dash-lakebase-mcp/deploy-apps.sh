@@ -12,24 +12,17 @@ MCP_URL="https://range-opt-mcp-daveok-7405614596482958.18.azure.databricksapps.c
 echo "📦 Deploying range_optimizer_mcp (MCP Server)..."
 cd mcp_app
 databricks bundle deploy --target dev
+databricks apps deploy range-opt-mcp-daveok
+databricks apps update range-opt-mcp-daveok
 cd ..
 
 echo "📦 Deploying range_optimizer_ui (UI App) with MCP_SERVER_URL=$MCP_URL..."
 cd ui_app
 
-# Create temporary app.yaml with MCP_SERVER_URL injected
-TEMP_APP_YAML=$(mktemp)
-cat app.yaml | sed "s|- name: MCP_SERVER_URL|- name: MCP_SERVER_URL\n    value: \"$MCP_URL\"|" > "$TEMP_APP_YAML"
-
-# Backup original and use temp
-mv app.yaml app.yaml.bak
-mv "$TEMP_APP_YAML" app.yaml
-
-# Deploy
+# Deploy (MCP_SERVER_URL is already configured in app.yaml)
 databricks bundle deploy --target dev
-
-# Restore original
-mv app.yaml.bak app.yaml
+databricks apps deploy range-opt-ui-daveok
+databricks apps update range-opt-ui-daveok
 
 cd ..
 

@@ -10,8 +10,8 @@ echo "  PGUSER: ${PGUSER:-<not set>}"
 echo "  PGPORT: ${PGPORT:-5432}"
 echo "  PGSSLMODE: ${PGSSLMODE:-require}"
 
-# Use APP_PORT environment variable or default to 9000
-APP_PORT=${APP_PORT:-9000}
+# Databricks Apps expect port 8000 by default
+APP_PORT=${APP_PORT:-8000}
 echo "Starting app on port: $APP_PORT"
 
 # Run the application

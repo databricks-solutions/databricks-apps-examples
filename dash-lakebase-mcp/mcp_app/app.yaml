@@ -8,6 +8,8 @@ env:
   # Note: Databricks automatically injects PGHOST, PGDATABASE, PGUSER for database resources
   - name: LAKEBASE_SCHEMA
     value: range_optimizer
+  - name: LAKEBASE_INSTANCE_NAME
+    value: daveok
 
 resources:
   # Database connection with elevated privileges for MCP tools
@@ -31,5 +33,5 @@ resources:
   # LLM endpoint for generating insights (MCP only)
   - name: llm-endpoint
     serving_endpoint:
-      name: databricks-meta-llama-3-3-70b-instruct
+      name: databricks-claude-haiku-4-5 
       permission: CAN_QUERY

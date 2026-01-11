@@ -1,34 +1,13 @@
 # Configuration for the Range Optimizer Dash UI application
-# Restricted permissions - read-only database access for user-facing UI
+# UI app connects to MCP Server for all data operations (no direct database access)
+# Architecture: ui_app --> MCP Server --> Database
 
 command: ["bash", "entrypoint.sh"]
 
 env:
-  # Schema name for database tables
-  # Note: Databricks automatically injects PGHOST, PGDATABASE, PGUSER for database resources
-  - name: LAKEBASE_SCHEMA
-    value: range_optimizer
-  # MCP Server URL for AI features (app-to-app communication)
-  # For deployment: Injected via bundle deploy process
-  # For local: Pass via --env flag (see run-local.sh)
+  # MCP Server URL for all data operations (app-to-app communication)
   - name: MCP_SERVER_URL
+    value: "https://range-opt-mcp-daveok-7405614596482958.18.azure.databricksapps.com"
 
-resources:
-  # Database connection for inventory data (restricted to connect only)
-  # Databricks automatically injects these environment variables:
-  #   PGHOST - hostname of the database instance
-  #   PGDATABASE - database name (databricks_postgres)
-  #   PGUSER - service principal username
-  #   PGAPPNAME - app name
-  - name: postgres-database
-    database:
-      database_name: databricks_postgres
-      instance_name: daveok
-      permission: CAN_CONNECT  # Read-only for UI - writeback handled by MCP
-  
-  # SQL Warehouse for Unity Catalog queries
-  - name: sql-warehouse
-    sql_warehouse:
-      id: 367edb93c65b15e8
-      permission: CAN_USE
-
+# Note: No database resource needed - UI calls MCP server for all data operations
+# The MCP server has the elevated database permissions
