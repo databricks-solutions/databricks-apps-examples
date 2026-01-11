@@ -15,11 +15,8 @@ echo ""
 # Ensure we are in the ui_app directory
 cd "$(dirname "$0")"
 
-# export PYTHONPATH for src layout
-export PYTHONPATH=$PYTHONPATH:src
-
-uv run python -m uvicorn excel_writeback.backend.app:app \
+uv run python -m uvicorn range_optimizer.backend.app:app \
     --host 0.0.0.0 \
     --port 9000 \
     --reload \
-    --reload-dir src/excel_writeback
+    --reload-dir range_optimizer

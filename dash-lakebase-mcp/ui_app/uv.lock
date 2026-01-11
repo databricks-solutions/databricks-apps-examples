@@ -254,45 +254,6 @@ wheels = [
 ]
 
 [[package]]
-name = "excel-writeback-ui"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "dash", extra = ["diskcache"] },
-    { name = "dash-ag-grid" },
-    { name = "dash-bootstrap-components" },
-    { name = "dash-iconify" },
-    { name = "dash-mantine-components" },
-    { name = "databricks-sdk" },
-    { name = "diskcache" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "multiprocess" },
-    { name = "pandas" },
-    { name = "psycopg", extra = ["binary", "pool"] },
-    { name = "pydantic-settings" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dash", extras = ["diskcache"], specifier = ">=2.17.0" },
-    { name = "dash-ag-grid", specifier = ">=31.2.0" },
-    { name = "dash-bootstrap-components", specifier = ">=1.6.0" },
-    { name = "dash-iconify", specifier = ">=0.1.2" },
-    { name = "dash-mantine-components", specifier = ">=0.14.0" },
-    { name = "databricks-sdk", specifier = ">=0.30.0" },
-    { name = "diskcache", specifier = ">=5.6.3" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "multiprocess", specifier = ">=0.70.16" },
-    { name = "pandas", specifier = ">=2.2.0" },
-    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.0" },
-    { name = "pydantic-settings", specifier = ">=2.4.0" },
-    { name = "uvicorn", specifier = ">=0.30.0" },
-]
-
-[[package]]
 name = "fastapi"
 version = "0.128.0"
 source = { registry = "https://pypi.org/simple" }
@@ -985,6 +946,45 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f8/bf/abbd3cdfb8fbc7fb3d4d38d320f2441b1e7cbe29be4f23797b4a2b5d8aac/pytz-2025.2.tar.gz", hash = "sha256:360b9e3dbb49a209c21ad61809c7fb453643e048b38924c765813546746e81c3", size = 320884, upload-time = "2025-03-25T02:25:00.538Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/c4/34e93fe5f5429d7570ec1fa436f1986fb1f00c3e0f43a589fe2bbcd22c3f/pytz-2025.2-py2.py3-none-any.whl", hash = "sha256:5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00", size = 509225, upload-time = "2025-03-25T02:24:58.468Z" },
+]
+
+[[package]]
+name = "range-optimizer-ui"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "dash", extra = ["diskcache"] },
+    { name = "dash-ag-grid" },
+    { name = "dash-bootstrap-components" },
+    { name = "dash-iconify" },
+    { name = "dash-mantine-components" },
+    { name = "databricks-sdk" },
+    { name = "diskcache" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "multiprocess" },
+    { name = "pandas" },
+    { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "pydantic-settings" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dash", extras = ["diskcache"], specifier = ">=2.17.0" },
+    { name = "dash-ag-grid", specifier = ">=31.2.0" },
+    { name = "dash-bootstrap-components", specifier = ">=1.6.0" },
+    { name = "dash-iconify", specifier = ">=0.1.2" },
+    { name = "dash-mantine-components", specifier = ">=0.14.0" },
+    { name = "databricks-sdk", specifier = ">=0.30.0" },
+    { name = "diskcache", specifier = ">=5.6.3" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "multiprocess", specifier = ">=0.70.16" },
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.0" },
+    { name = "pydantic-settings", specifier = ">=2.4.0" },
+    { name = "uvicorn", specifier = ">=0.30.0" },
 ]
 
 [[package]]

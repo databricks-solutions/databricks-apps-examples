@@ -1,0 +1,41 @@
+# Databricks bundle ignore file
+# Files matching patterns here will not be synced to Databricks workspace
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Development and IDE files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Cache directories
+cache/
+*.db
+*.db-shm
+*.db-wal
+
+# Local development scripts (use entrypoint.sh for deployment)
+run.sh
+
+# Git
+.git/
+.gitignore
+
+# MLflow artifacts (use UC registered models instead)
+mlruns/
+mlflow.db
+
+# Documentation
+*.md

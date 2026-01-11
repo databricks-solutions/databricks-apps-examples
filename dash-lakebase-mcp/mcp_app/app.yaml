@@ -1,18 +1,21 @@
-# Configuration for the MCP Server application
+# Configuration for the Range Optimizer MCP Server application
 # Elevated permissions - full database access and LLM access for AI tools
 
-command: ["uv", "run", "uvicorn", "excel_writeback.backend.mcp_standalone:app", "--host", "0.0.0.0", "--port", "8000"]
+command: ["bash", "entrypoint.sh"]
 
 env:
-  - name: LAKEBASE_INSTANCE_NAME
-    value: daveok
-  - name: LAKEBASE_DATABASE
-    value: databricks_postgres
+  # Schema name for database tables
+  # Note: Databricks automatically injects PGHOST, PGDATABASE, PGUSER for database resources
   - name: LAKEBASE_SCHEMA
-    value: excel_app
+    value: range_optimizer
 
 resources:
   # Database connection with elevated privileges for MCP tools
+  # Databricks automatically injects these environment variables:
+  #   PGHOST - hostname of the database instance
+  #   PGDATABASE - database name (databricks_postgres)
+  #   PGUSER - service principal username
+  #   PGAPPNAME - app name
   - name: postgres-database
     database:
       database_name: databricks_postgres

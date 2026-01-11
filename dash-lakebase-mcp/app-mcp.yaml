@@ -1,7 +1,7 @@
 # Configuration for the MCP Server application
 # Elevated permissions - full database access and LLM access for AI tools
 
-command: ["uv", "run", "uvicorn", "excel_writeback.backend.mcp_standalone:app", "--host", "0.0.0.0", "--port", "8000"]
+command: ["uv", "run", "uvicorn", "range_optimizer.backend.mcp_standalone:app", "--host", "0.0.0.0", "--port", "9000"]
 
 env:
   - name: LAKEBASE_INSTANCE_NAME
@@ -9,7 +9,7 @@ env:
   - name: LAKEBASE_DATABASE
     value: databricks_postgres
   - name: LAKEBASE_SCHEMA
-    value: excel_app
+    value: range_optimizer
 
 resources:
   # Database connection with elevated privileges for MCP tools

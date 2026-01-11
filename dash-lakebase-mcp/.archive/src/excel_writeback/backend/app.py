@@ -45,7 +45,7 @@ def create_dash_app():
     
     # Create Dash app - serve at root
     dash_app = Dash(
-        name="excel_writeback_dash",
+        name="range_optimizer_dash",
         external_stylesheets=dmc.styles.ALL,
         suppress_callback_exceptions=True,
         use_pages=True,

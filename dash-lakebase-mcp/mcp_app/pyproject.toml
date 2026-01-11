@@ -1,7 +1,7 @@
 [project]
-name = "excel-writeback-mcp"
+name = "range-optimizer-mcp"
 version = "0.1.0"
-description = "MCP Server for Excel Writeback"
+description = "MCP Server for Stock Range Optimization"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -22,4 +22,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/excel_writeback"]
+packages = ["range_optimizer"]

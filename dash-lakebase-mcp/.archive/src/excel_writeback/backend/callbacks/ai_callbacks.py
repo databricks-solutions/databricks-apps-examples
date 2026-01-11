@@ -22,7 +22,7 @@ from ..components.ai_assistant import (
 # MCP Server URL - can be overridden by environment variable
 MCP_SERVER_URL = os.environ.get(
     "MCP_SERVER_URL",
-    "http://localhost:8000"  # Default for local development
+    "http://localhost:9000"  # Default for local development
 )
 
 

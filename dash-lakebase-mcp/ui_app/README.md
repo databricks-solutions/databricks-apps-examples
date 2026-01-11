@@ -8,13 +8,13 @@ This application consists of two separate components for security isolation:
 
 ### 1. **Dash UI Application** (Main App)
 - Full-stack Dash application with data grid interface
-- Serves at `http://localhost:8000`
+- Serves at `http://localhost:9000`
 - REST API at `/api`
 - Restricted database permissions (read/write via app logic)
 
 ### 2. **MCP Server** (AI Tooling)
 - Standalone Model Context Protocol server
-- Serves at `http://localhost:8001`
+- Serves at `http://localhost:9001`
 - Elevated permissions for AI-powered operations
 - Used by Claude Desktop and other MCP clients
 
@@ -42,19 +42,19 @@ cp .env.example .env
 ```bash
 ./run_dev.sh
 # Or manually:
-uv run uvicorn excel_writeback.backend.app:app --reload --port 8000
+uv run uvicorn range_optimizer.backend.app:app --reload --port 9000
 ```
 
-Access at: **http://localhost:8000**
+Access at: **http://localhost:9000**
 
 #### Run MCP Server (Optional - for AI features)
 ```bash
 ./run_mcp.sh
 # Or manually:
-uv run uvicorn excel_writeback.backend.mcp_standalone:app --reload --port 8001
+uv run uvicorn range_optimizer.backend.mcp_standalone:app --reload --port 9001
 ```
 
-Access at: **http://localhost:8001/mcp**
+Access at: **http://localhost:9001/mcp**
 
 ## Features
 
@@ -80,8 +80,8 @@ Access at: **http://localhost:8001/mcp**
 databricks bundle deploy
 
 # Deploy individually
-databricks bundle deploy --resource apps.excel_writeback_ui
-databricks bundle deploy --resource apps.excel_writeback_mcp
+databricks bundle deploy --resource apps.range_optimizer_ui
+databricks bundle deploy --resource apps.range_optimizer_mcp
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
@@ -90,7 +90,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 ```
 excel-writeback-apx/
-├── src/excel_writeback/
+├── src/range_optimizer/
 │   └── backend/
 │       ├── app.py              # Main Dash application
 │       ├── mcp_standalone.py   # Standalone MCP server
@@ -122,8 +122,8 @@ DATABRICKS_TOKEN=your-token
 
 # Lakebase Configuration
 LAKEBASE_INSTANCE_NAME=your-instance
-LAKEBASE_DATABASE=your-database
-LAKEBASE_SCHEMA=your-schema
+LAKEBASE_DATABASE=databricks_postgres
+LAKEBASE_SCHEMA=range_optimizer
 ```
 
 ### Database Permissions
@@ -140,17 +140,17 @@ LAKEBASE_SCHEMA=your-schema
 ## Development Workflow
 
 ### Make Code Changes
-1. Edit files in `src/excel_writeback/backend/`
+1. Edit files in `src/range_optimizer/backend/`
 2. Uvicorn auto-reloads on save
 3. Test in browser
 
 ### Add New Dash Pages
-1. Create file in `src/excel_writeback/backend/pages/`
+1. Create file in `src/range_optimizer/backend/pages/`
 2. Use Dash `register_page()` decorator
-3. Add callbacks in `src/excel_writeback/backend/callbacks/`
+3. Add callbacks in `src/range_optimizer/backend/callbacks/`
 
 ### Add MCP Tools
-1. Add tool functions in `src/excel_writeback/backend/mcp/tools.py`
+1. Add tool functions in `src/range_optimizer/backend/mcp/tools.py`
 2. Register with FastMCP decorators
 3. Test with Claude Desktop
 

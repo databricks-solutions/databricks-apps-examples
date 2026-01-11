@@ -228,7 +228,7 @@ def upload_data_to_uc(
         # Trigger Stock Optimization via MCP
         log("→ Triggering stock optimization via MCP...")
         try:
-            mcp_url = os.environ.get("MCP_SERVER_URL", "http://localhost:8000")
+            mcp_url = os.environ.get("MCP_SERVER_URL", "http://localhost:9000")
             response = requests.post(
                 f"{mcp_url}/api/run_optimization", 
                 json={"forecast_id": forecast_id},

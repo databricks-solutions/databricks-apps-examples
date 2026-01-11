@@ -16,10 +16,10 @@ import os
 
 # App metadata (no longer using apx)
 app_name = "excel-writeback"
-app_slug = "excel_writeback"
+app_slug = "range_optimizer"
 api_prefix = "/api"
 app_name = "excel-writeback"
-app_slug = "excel_writeback"
+app_slug = "range_optimizer"
 api_prefix = "/api"
 from typing import ClassVar, Optional
 import os
@@ -135,7 +135,7 @@ class AppConfig(BaseSettings):
     api_prefix: str = Field(default=api_prefix)
     
     # MCP Server URL for optimization
-    mcp_server_url: str = Field(default="http://localhost:8000", alias="MCP_SERVER_URL")
+    mcp_server_url: str = Field(default="http://localhost:9000", alias="MCP_SERVER_URL")
 
     @property
     def static_assets_path(self) -> Path:

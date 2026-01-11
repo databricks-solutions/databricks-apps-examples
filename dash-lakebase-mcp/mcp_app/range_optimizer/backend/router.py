@@ -1,0 +1,282 @@
+"""
+API Router for the Excel Writeback application.
+
+Provides endpoints for:
+- Layout data CRUD operations
+- Forecast submission and listing
+- Stock optimization results
+- Categories listing
+"""
+
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.iam import User as UserOut
+import pandas as pd
+import datetime
+import uuid
+import httpx
+
+from .models import (
+    VersionOut,
+    LayoutDataIn, LayoutDataOut, LayoutDataBatchIn, LayoutDataBatchOut,
+    ForecastSubmissionIn, ForecastSubmissionOut, ForecastSummaryOut, ForecastListOut,
+    OptimizationResultsOut, OptimizationSummaryOut, StockOptimizationOut,
+    CategoryOut, CategoriesListOut,
+)
+from .dependencies import get_obo_ws
+from .config import conf, db_config
+from .database import query_df, query_dict_list, bulk_insert, check_table_exists
+from .logger import logger
+
+api = APIRouter(prefix=conf.api_prefix)
+
+
+# ============================================================
+# Version & User Endpoints
+# ============================================================
+
+@api.get("/version", response_model=VersionOut, operation_id="version")
+async def version():
+    """Get application version"""
+    return VersionOut.from_metadata()
+
+
+@api.get("/current-user", response_model=UserOut, operation_id="currentUser")
+def me(obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)]):
+    """Get current user information"""
+    return obo_ws.current_user.me()
+
+
+# ============================================================
+# Categories Endpoints
+# ============================================================
+
+@api.get("/categories", response_model=CategoriesListOut, operation_id="listCategories")
+async def list_categories():
+    """Get list of available categories with product counts"""
+    table_name = db_config.get_full_table_name(db_config.TABLE_DIM_SKU)
+    
+    if not check_table_exists(table_name):
+        return CategoriesListOut(categories=[])
+    
+    query = f'''
+        SELECT "CATEGORY" as name, COUNT(*) as product_count
+        FROM {table_name}
+        GROUP BY "CATEGORY"
+        ORDER BY "CATEGORY"
+    '''
+    
+    df = query_df(query)
+    categories = [
+        CategoryOut(name=row['name'], product_count=int(row['product_count']))
+        for _, row in df.iterrows()
+    ]
+    
+    return CategoriesListOut(categories=categories)
+
+
+# ============================================================
+# Layout Data Endpoints
+# ============================================================
+
+@api.get("/layout-data", response_model=List[LayoutDataOut], operation_id="listLayoutData")
+async def list_layout_data(
+    category: Optional[str] = Query(None, description="Filter by category name"),
+    limit: Optional[int] = Query(None, description="Limit number of results"),
+):
+    """Get SKU data for layout, optionally filtered by category"""
+    table_name = db_config.get_full_table_name(db_config.TABLE_DIM_SKU)
+    
+    if not check_table_exists(table_name):
+        return []
+    
+    if category and category != "All":
+        query = f'SELECT * FROM {table_name} WHERE "CATEGORY" = %s'
+        params = (category,)
+    else:
+        query = f'SELECT * FROM {table_name}'
+        params = None
+    
+    if limit:
+        query += f' LIMIT {limit}'
+    
+    results = query_dict_list(query, params)
+    return [LayoutDataOut(**r) for r in results]
+
+
+@api.post("/layout-data", response_model=LayoutDataBatchOut, operation_id="saveLayoutData")
+async def save_layout_data(data: LayoutDataBatchIn):
+    """Save SKU data (batch insert)"""
+    table_name = db_config.get_full_table_name(db_config.TABLE_DIM_SKU)
+    
+    # Convert to DataFrame
+    records = [r.model_dump(by_alias=True) for r in data.records]
+    df = pd.DataFrame(records)
+    
+    try:
+        rows = bulk_insert(table_name, df, overwrite=data.overwrite)
+        return LayoutDataBatchOut(
+            success=True,
+            rows_affected=rows,
+            message=f"Successfully saved {rows} records"
+        )
+    except Exception as e:
+        logger.error(f"Failed to save SKU data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Forecast Endpoints
+# ============================================================
+
+@api.post("/forecasts", response_model=ForecastSubmissionOut, operation_id="submitForecast")
+async def submit_forecast(data: ForecastSubmissionIn):
+    """Submit a new optimization run"""
+    table_name = db_config.get_full_table_name(db_config.TABLE_OPTIMIZATION_RUNS)
+    
+    # Generate run ID
+    run_id = f"RUN-{datetime.datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8]}"
+    timestamp = datetime.datetime.now()
+    
+    # Convert to DataFrame and add metadata
+    records = [r.model_dump(by_alias=True) for r in data.records]
+    df = pd.DataFrame(records)
+    df["RUN_ID"] = run_id
+    df["SUBMISSION_TIMESTAMP"] = timestamp.isoformat()
+    df["ROW_ID"] = [f"{run_id}-{i+1:04d}" for i in range(len(df))]
+    
+    try:
+        rows = bulk_insert(table_name, df, overwrite=False)
+        
+        # Optionally trigger optimization via MCP
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{conf.mcp_server_url}/api/run_optimization",
+                    json={"forecast_id": run_id},
+                    timeout=30.0
+                )
+                if response.status_code == 200:
+                    logger.info(f"Optimization triggered for {run_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger optimization: {e}")
+        
+        return ForecastSubmissionOut(
+            forecast_id=run_id,
+            submission_timestamp=timestamp,
+            row_count=rows,
+            message=f"Optimization run submitted successfully"
+        )
+    except Exception as e:
+        logger.error(f"Failed to submit optimization run: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/forecasts", response_model=ForecastListOut, operation_id="listForecasts")
+async def list_forecasts(
+    limit: Optional[int] = Query(20, description="Limit number of results"),
+):
+    """Get list of submitted optimization runs"""
+    table_name = db_config.get_full_table_name(db_config.TABLE_OPTIMIZATION_RUNS)
+    
+    if not check_table_exists(table_name):
+        return ForecastListOut(forecasts=[], total=0)
+    
+    query = f'''
+        SELECT 
+            "RUN_ID" as forecast_id,
+            MIN("SUBMISSION_TIMESTAMP") as submission_timestamp,
+            COUNT(*) as row_count,
+            COUNT(DISTINCT "CATEGORY") as category_count
+        FROM {table_name}
+        GROUP BY "RUN_ID"
+        ORDER BY MIN("SUBMISSION_TIMESTAMP") DESC
+        LIMIT {limit}
+    '''
+    
+    df = query_df(query)
+    forecasts = [
+        ForecastSummaryOut(
+            forecast_id=row['forecast_id'],
+            submission_timestamp=pd.to_datetime(row['submission_timestamp']),
+            row_count=int(row['row_count']),
+            category_count=int(row['category_count'])
+        )
+        for _, row in df.iterrows()
+    ]
+    
+    return ForecastListOut(forecasts=forecasts, total=len(forecasts))
+
+
+# ============================================================
+# Stock Optimization Endpoints
+# ============================================================
+
+@api.get("/forecasts/{forecast_id}/optimization", response_model=OptimizationResultsOut, operation_id="getOptimizationResults")
+async def get_optimization_results(forecast_id: str):
+    """Get planogram optimization results for a run"""
+    table_name = db_config.opt_planogram_table
+    
+    if not check_table_exists(table_name):
+        raise HTTPException(status_code=404, detail="No optimization results found")
+    
+    query = f'''
+        SELECT * FROM {table_name}
+        WHERE optimization_run_id = %s
+        ORDER BY expected_margin_weekly DESC
+    '''
+    
+    df = query_df(query, (forecast_id,))
+    
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No optimization results for run {forecast_id}")
+    
+    # Build results (map new schema to existing API model for compatibility)
+    results = []
+    for _, row in df.iterrows():
+        results.append(StockOptimizationOut(
+            forecast_id=row.get('optimization_run_id', forecast_id),
+            sell_id=row.get('sku_id', ''),
+            product_name=row.get('sku_name', row.get('sku_id', '')),
+            category_name=row.get('category', ''),
+            current_stock=int(row.get('current_facings', 0)),  # Map facings to stock for API compat
+            predicted_demand=float(row.get('expected_units_weekly', 0)),
+            optimal_stock=int(row.get('recommended_facings', 0)),
+            reorder_quantity=int(row.get('facings_change', 0)),
+            confidence_score=float(row.get('score', 0)),
+            recommendation=row.get('change_from_current', 'No change'),
+        ))
+    
+    # Build summary
+    products_needing_change = sum(1 for r in results if r.reorder_quantity != 0)
+    total_facings_change = sum(r.reorder_quantity for r in results)
+    avg_score = sum(r.confidence_score for r in results) / len(results) if results else 0
+    
+    summary = OptimizationSummaryOut(
+        forecast_id=forecast_id,
+        total_products=len(results),
+        products_needing_reorder=products_needing_change,
+        total_reorder_quantity=total_facings_change,
+        avg_confidence_score=avg_score
+    )
+    
+    return OptimizationResultsOut(summary=summary, results=results)
+
+
+@api.get("/forecasts-with-optimization", response_model=List[str], operation_id="listForecastsWithOptimization")
+async def list_forecasts_with_optimization():
+    """Get list of run IDs that have optimization results"""
+    table_name = db_config.opt_planogram_table
+    
+    if not check_table_exists(table_name):
+        return []
+    
+    query = f'''
+        SELECT DISTINCT optimization_run_id as forecast_id
+        FROM {table_name}
+        ORDER BY optimization_run_id DESC
+    '''
+    
+    df = query_df(query)
+    return df['forecast_id'].tolist() if not df.empty else []

@@ -1,0 +1,197 @@
+bundle:
+  name: stock-optimization-ml
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog name
+    default: main
+  
+  schema:
+    description: Schema name for features and models
+    default: stock_optimization
+
+resources:
+  jobs:
+    # Job 1: Create Feature Tables
+    create_feature_tables:
+      name: "[${bundle.environment}] 00 - Create Feature Tables"
+      
+      tasks:
+        - task_key: create_features
+          job_cluster_key: serverless_cluster
+          notebook_task:
+            notebook_path: ./00_create_feature_tables.py
+            source: WORKSPACE
+          libraries:
+            - pypi:
+                package: databricks-feature-engineering
+      
+      job_clusters:
+        - job_cluster_key: serverless_cluster
+          new_cluster:
+            spark_version: 17.3.x-scala2.13
+            node_type_id: Standard_DS3_v2
+            num_workers: 0  # Single node
+            data_security_mode: SINGLE_USER
+            runtime_engine: PHOTON
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+      
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+
+    # Job 2: Train Model
+    train_stock_optimizer:
+      name: "[${bundle.environment}] 01 - Train Stock Optimizer"
+      
+      tasks:
+        - task_key: train_model
+          job_cluster_key: ml_cluster
+          notebook_task:
+            notebook_path: ./01_train_stock_optimizer.py
+            source: WORKSPACE
+          libraries:
+            - pypi:
+                package: databricks-feature-engineering
+            - pypi:
+                package: mlflow[databricks]
+      
+      job_clusters:
+        - job_cluster_key: ml_cluster
+          new_cluster:
+            spark_version: 17.3.x-cpu-ml-scala2.13
+            node_type_id: Standard_DS3_v2
+            num_workers: 0  # Single node
+            data_security_mode: SINGLE_USER
+            runtime_engine: PHOTON
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+      
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+
+    # Job 3: Deploy Serving Endpoint
+    deploy_serving_endpoint:
+      name: "[${bundle.environment}] 02 - Deploy Serving Endpoint"
+      
+      tasks:
+        - task_key: deploy_endpoint
+          job_cluster_key: ml_cluster
+          notebook_task:
+            notebook_path: ./02_deploy_serving_endpoint.py
+            source: WORKSPACE
+          libraries:
+            - pypi:
+                package: databricks-sdk
+      
+      job_clusters:
+        - job_cluster_key: ml_cluster
+          new_cluster:
+            spark_version: 17.3.x-cpu-ml-scala2.13
+            node_type_id: Standard_DS3_v2
+            num_workers: 0  # Single node
+            data_security_mode: SINGLE_USER
+            runtime_engine: PHOTON
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+      
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+
+    # Full Pipeline Job - Run all notebooks in sequence
+    full_ml_pipeline:
+      name: "[${bundle.environment}] Full ML Pipeline"
+      
+      tasks:
+        - task_key: create_features
+          job_cluster_key: ml_cluster
+          notebook_task:
+            notebook_path: ./00_create_feature_tables.py
+            source: WORKSPACE
+          libraries:
+            - pypi:
+                package: databricks-feature-engineering
+        
+        - task_key: train_model
+          depends_on:
+            - task_key: create_features
+          job_cluster_key: ml_cluster
+          notebook_task:
+            notebook_path: ./01_train_stock_optimizer.py
+            source: WORKSPACE
+          libraries:
+            - pypi:
+                package: databricks-feature-engineering
+            - pypi:
+                package: mlflow[databricks]
+        
+        - task_key: deploy_endpoint
+          depends_on:
+            - task_key: train_model
+          job_cluster_key: ml_cluster
+          notebook_task:
+            notebook_path: ./02_deploy_serving_endpoint.py
+            source: WORKSPACE
+          libraries:
+            - pypi:
+                package: databricks-sdk
+      
+      job_clusters:
+        - job_cluster_key: ml_cluster
+          new_cluster:
+            spark_version: 17.3.x-cpu-ml-scala2.13
+            node_type_id: Standard_DS3_v2
+            num_workers: 0  # Single node
+            data_security_mode: SINGLE_USER
+            runtime_engine: PHOTON
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+      
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+
+# Sync notebooks to workspace
+sync:
+  include:
+    - "*.py"
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/.bundle/stock_optimization_ml_prod/${bundle.name}
+    
+    variables:
+      catalog: prod
+      schema: stock_optimization

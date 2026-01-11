@@ -1,6 +1,6 @@
 #!/bin/bash
 # MCP Server for Excel Writeback
-# Runs the standalone MCP server at http://localhost:8001
+# Runs the standalone MCP server at http://localhost:9001
 
 set -e
 
@@ -23,8 +23,8 @@ cd "$(dirname "$0")"
 # but uv run with project should handle it.
 export PYTHONPATH=$PYTHONPATH:src
 
-uv run python -m uvicorn excel_writeback.backend.mcp_standalone:app \
+uv run python -m uvicorn range_optimizer.backend.mcp_standalone:app \
     --host 0.0.0.0 \
     --port 9001 \
     --reload \
-    --reload-dir src/excel_writeback
+    --reload-dir src/range_optimizer

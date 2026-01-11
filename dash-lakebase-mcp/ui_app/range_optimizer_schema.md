@@ -53,9 +53,9 @@ CREATE INDEX idx_sku_status ON dim_sku(sku_status);
 
 | sku_id | sku_name | brand_id | category_id | pack_size | pack_width_mm | is_private_label |
 |--------|----------|----------|-------------|-----------|---------------|------------------|
-| 1001 | Crispy Flakes 500g | 101 | 5 | 500 | 180 | false |
+| 1001 | Crispy Flakes 500g | 101 | 51 | 500 | 180 | false |
 | 1002 | Value Cereal 750g | 102 | 5 | 750 | 200 | true |
-| 1003 | Organic Oats 400g | 103 | 5 | 400 | 165 | false |
+| 1003 | Organic Oats 400g | 103 | 52 | 400 | 165 | false |
 
 ---
 
@@ -571,9 +571,9 @@ INSERT INTO dim_sku (sku_id, gtin_ean, sku_name, brand_id, manufacturer_id, cate
                       pack_size, pack_size_uom, case_pack_qty, pack_width_mm, 
                       is_private_label, sku_status, created_at, updated_at)
 VALUES
-  (1001, 5012000456789, 'Crispy Flakes Cereal 500g', 101, 201, 5, 500, 'g', 20, 180, FALSE, 'active', NOW(), NOW()),
+  (1001, 5012000456789, 'Crispy Flakes Cereal 500g', 101, 201, 51, 500, 'g', 20, 180, FALSE, 'active', NOW(), NOW()),
   (1002, 5012000456790, 'Value Cereal 750g', 102, 202, 5, 750, 'g', 15, 200, TRUE, 'active', NOW(), NOW()),
-  (1003, 5012000456791, 'Organic Oats 400g', 103, 203, 5, 400, 'g', 24, 165, FALSE, 'active', NOW(), NOW()),
+  (1003, 5012000456791, 'Organic Oats 400g', 103, 203, 52, 400, 'g', 24, 165, FALSE, 'active', NOW(), NOW()),
   (1004, 5012000456792, 'Kids Chocolate Cereal 300g', 104, 201, 51, 300, 'g', 30, 150, FALSE, 'active', NOW(), NOW()),
   (1005, 5012000456793, 'High Protein Granola 600g', 105, 204, 52, 600, 'g', 16, 190, FALSE, 'new', NOW(), NOW());
 ```

@@ -1,18 +1,25 @@
-# Configuration for the main Dash UI application
+# Configuration for the Range Optimizer Dash UI application
 # Restricted permissions - read-only database access for user-facing UI
 
-command: ["uv", "run", "uvicorn", "excel_writeback.backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+command: ["bash", "entrypoint.sh"]
 
 env:
-  - name: LAKEBASE_INSTANCE_NAME
-    value: daveok
-  - name: LAKEBASE_DATABASE
-    value: databricks_postgres
+  # Schema name for database tables
+  # Note: Databricks automatically injects PGHOST, PGDATABASE, PGUSER for database resources
   - name: LAKEBASE_SCHEMA
-    value: excel_app
+    value: range_optimizer
+  # MCP Server URL for AI features (app-to-app communication)
+  # For deployment: Injected via bundle deploy process
+  # For local: Pass via --env flag (see run-local.sh)
+  - name: MCP_SERVER_URL
 
 resources:
   # Database connection for inventory data (restricted to connect only)
+  # Databricks automatically injects these environment variables:
+  #   PGHOST - hostname of the database instance
+  #   PGDATABASE - database name (databricks_postgres)
+  #   PGUSER - service principal username
+  #   PGAPPNAME - app name
   - name: postgres-database
     database:
       database_name: databricks_postgres

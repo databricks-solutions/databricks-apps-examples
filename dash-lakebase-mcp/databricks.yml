@@ -1,19 +1,30 @@
 bundle:
-  name: excel-writeback
+  name: range-optimizer
+
+variables:
+  mcp_server_url:
+    description: "URL for the MCP server (used by UI app for app-to-app communication)"
+    default: "https://range-opt-mcp-daveok-7405614596482958.18.azure.databricksapps.com"
 
 targets:
   dev:
     mode: development
     default: true
+    variables:
+      mcp_server_url: "https://range-opt-mcp-daveok-7405614596482958.18.azure.databricksapps.com"
+
+sync:
+  include:
+    - notebooks/*.py
 
 resources:
   apps:
-    excel_writeback_ui:
-      name: excel-writeback-ui-${workspace.current_user.short_name}
-      description: Excel-like data editing interface with Dash
+    range_optimizer_ui:
+      name: range-opt-ui-daveok
+      description: Stock Range Optimization UI with Dash
       source_code_path: ui_app
       
-    excel_writeback_mcp:
-      name: excel-writeback-mcp-${workspace.current_user.short_name}
-      description: MCP server for Excel Writeback with elevated privileges
+    range_optimizer_mcp:
+      name: range-opt-mcp-daveok
+      description: MCP server for Range Optimizer with elevated privileges
       source_code_path: mcp_app
