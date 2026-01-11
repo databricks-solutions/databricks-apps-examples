@@ -1,33 +1,41 @@
 #!/bin/bash
-# Deployment script for Databricks Apps with environment variable injection
-# This script handles variable substitution for production deployment
+# Deployment script for Databricks Apps
+# Deploys both apps using Databricks Asset Bundles from the root directory
 
 set -e
 
+# Ensure we're in the correct directory (where databricks.yml is located)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "🚀 Deploying Databricks Apps..."
+echo "📂 Working directory: $(pwd)"
 
-# Get the MCP server URL from databricks.yml variable
-MCP_URL="https://range-opt-mcp-daveok-7405614596482958.18.azure.databricksapps.com"
+# Verify databricks.yml exists
+if [ ! -f "databricks.yml" ]; then
+    echo "❌ Error: databricks.yml not found"
+    exit 1
+fi
 
-echo "📦 Deploying range_optimizer_mcp (MCP Server)..."
-cd mcp_app
+echo ""
+echo "📦 Deploying both apps via bundle..."
+echo "   - range_optimizer_mcp (MCP Server)"  
+echo "   - range_optimizer_ui (UI App)"
+echo ""
+
+# Deploy the bundle (uploads source code)
 databricks bundle deploy --target dev
+
+echo ""
+echo "🚀 Triggering app deployments..."
+
+# Trigger actual app deployments
 databricks apps deploy range-opt-mcp-daveok
-databricks apps update range-opt-mcp-daveok
-cd ..
-
-echo "📦 Deploying range_optimizer_ui (UI App) with MCP_SERVER_URL=$MCP_URL..."
-cd ui_app
-
-# Deploy (MCP_SERVER_URL is already configured in app.yaml)
-databricks bundle deploy --target dev
 databricks apps deploy range-opt-ui-daveok
-databricks apps update range-opt-ui-daveok
 
-cd ..
-
+echo ""
 echo "✅ Deployment complete!"
 echo ""
 echo "Apps deployed:"
 echo "  🤖 MCP Server: https://range-opt-mcp-daveok-7405614596482958.18.azure.databricksapps.com"
-echo "  🎨 UI App:     https://range-opt-ui-daveok-<workspace-id>.azure.databricksapps.com"
+echo "  🎨 UI App:     https://range-opt-ui-daveok-7405614596482958.18.azure.databricksapps.com"

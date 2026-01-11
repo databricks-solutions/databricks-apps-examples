@@ -1,29 +1,46 @@
 #!/bin/bash
 # Generic helper script to run any Databricks app locally with automatic credential injection
-# Usage: ./run-databricks-app-local.sh <app_dir> <app_port> <proxy_port> [database_instance]
+# Usage: ./run-databricks-app-local.sh <app_dir> <app_port> <proxy_port> [database_instance] [--dev]
 #
 # Examples:
 #   ./run-databricks-app-local.sh mcp_app 9000 9001 daveok
 #   ./run-databricks-app-local.sh ui_app 8002 8003 daveok
+#   ./run-databricks-app-local.sh ui_app 9002 9003 daveok --dev   # Hot reload enabled!
 #   ./run-databricks-app-local.sh my_other_app 8004 8005 daveok
 
 set -e
 
-# Parse arguments
-APP_DIR="${1:-mcp_app}"
-APP_PORT="${2:-9000}"
-PROXY_PORT="${3:-9001}"
-DB_INSTANCE="${4:-daveok}"
+# Check for --dev flag anywhere in arguments
+DEV_MODE="false"
+for arg in "$@"; do
+    if [ "$arg" = "--dev" ]; then
+        DEV_MODE="true"
+    fi
+done
+
+# Parse positional arguments (filter out --dev)
+POSITIONAL_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" != "--dev" ]; then
+        POSITIONAL_ARGS+=("$arg")
+    fi
+done
+
+APP_DIR="${POSITIONAL_ARGS[0]:-mcp_app}"
+APP_PORT="${POSITIONAL_ARGS[1]:-9000}"
+PROXY_PORT="${POSITIONAL_ARGS[2]:-9001}"
+DB_INSTANCE="${POSITIONAL_ARGS[3]:-daveok}"
 
 # Validate app directory exists
 if [ ! -d "$APP_DIR" ]; then
     echo "❌ Error: App directory '$APP_DIR' not found"
     echo ""
-    echo "Usage: $0 <app_dir> <app_port> <proxy_port> [database_instance]"
+    echo "Usage: $0 <app_dir> <app_port> <proxy_port> [database_instance] [--dev]"
     echo ""
     echo "Examples:"
     echo "  $0 mcp_app 9000 9001 daveok"
     echo "  $0 ui_app 8002 8003 daveok"
+    echo "  $0 ui_app 9002 9003 daveok --dev   # Enable hot reload"
     exit 1
 fi
 
@@ -54,6 +71,9 @@ echo ""
 echo "🚀 Starting $APP_DIR locally..."
 echo "   App running on:      http://localhost:$APP_PORT"
 echo "   Access via proxy at: http://localhost:$PROXY_PORT"
+if [ "$DEV_MODE" = "true" ]; then
+    echo "   🔥 HOT RELOAD ENABLED - code changes will auto-restart!"
+fi
 echo ""
 
 # Change to app directory
@@ -66,6 +86,7 @@ ENV_ARGS=(
     --env "PGSSLMODE=require"
     --env "PGPORT=5432"
     --env "LAKEBASE_INSTANCE_NAME=$LAKEBASE_INSTANCE_NAME"
+    --env "DEV_MODE=$DEV_MODE"
 )
 
 # Add optional variables if they were fetched successfully
@@ -86,9 +107,20 @@ fi
 # Set environment variable to skip venv replacement prompts
 export UV_VENV_CLEAR=1
 
+# Check if app-local.yaml exists (preferred for local dev - no hardcoded URLs)
+ENTRY_POINT_ARGS=()
+if [ -f "app-local.yaml" ]; then
+    echo "📄 Using app-local.yaml (local development config)"
+    ENTRY_POINT_ARGS=(--entry-point "app-local.yaml")
+elif [ -f "app-local.yml" ]; then
+    echo "📄 Using app-local.yml (local development config)"
+    ENTRY_POINT_ARGS=(--entry-point "app-local.yml")
+fi
+
 # Run the app with injected environment variables
 databricks apps run-local \
   --prepare-environment \
   --app-port "$APP_PORT" \
   --port "$PROXY_PORT" \
+  "${ENTRY_POINT_ARGS[@]}" \
   "${ENV_ARGS[@]}"

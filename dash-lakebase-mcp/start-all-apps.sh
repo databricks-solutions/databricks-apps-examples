@@ -3,12 +3,23 @@
 #   - MCP App: ports 9000/9001
 #   - UI App:  ports 9002/9003
 # Does not touch any external services on port 9000
+#
+# Usage:
+#   ./start-all-apps.sh          # Normal mode
+#   ./start-all-apps.sh --dev    # Hot reload enabled for both apps!
 
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "🚀 Starting Range Optimizer apps..."
+# Check for --dev flag
+DEV_FLAG=""
+if [ "$1" = "--dev" ]; then
+    DEV_FLAG="--dev"
+    echo "🚀 Starting Range Optimizer apps in DEV MODE (hot reload enabled)..."
+else
+    echo "🚀 Starting Range Optimizer apps..."
+fi
 echo ""
 
 # Check if screen is available
@@ -28,7 +39,7 @@ screen -ls | grep "ui-app" | awk '{print $1}' | xargs -I {} screen -X -S {} quit
 
 echo ""
 echo "📦 Starting MCP app (ports 9000/9001)..."
-screen -dmS mcp-app bash -c "cd '$PROJECT_DIR' && ./run-databricks-app-local.sh mcp_app 9000 9001 daveok > mcp-app.log 2>&1"
+screen -dmS mcp-app bash -c "cd '$PROJECT_DIR' && ./run-databricks-app-local.sh mcp_app 9000 9001 daveok $DEV_FLAG > mcp-app.log 2>&1"
 
 # Wait for MCP app first
 echo "⏳ Waiting for MCP app to initialize (up to 60s)..."
@@ -45,7 +56,7 @@ done
 
 echo ""
 echo "🎨 Starting UI app (ports 9002/9003)..."
-screen -dmS ui-app bash -c "cd '$PROJECT_DIR' && export MCP_SERVER_URL='http://localhost:9001' && ./run-databricks-app-local.sh ui_app 9002 9003 daveok > ui-app.log 2>&1"
+screen -dmS ui-app bash -c "cd '$PROJECT_DIR' && export MCP_SERVER_URL='http://localhost:9001' && ./run-databricks-app-local.sh ui_app 9002 9003 daveok $DEV_FLAG > ui-app.log 2>&1"
 
 echo ""
 echo "⏳ Waiting for UI app to initialize (up to 90s)..."
@@ -70,6 +81,9 @@ done
 echo ""
 if [ "$UI_READY" = true ]; then
     echo "✅ Both apps started successfully!"
+    if [ -n "$DEV_FLAG" ]; then
+        echo "   🔥 Hot reload is ACTIVE - code changes auto-restart the servers"
+    fi
 else
     echo "⚠️  UI app may still be starting. Check logs with:"
     echo "   screen -r ui-app"
@@ -79,8 +93,6 @@ echo "📍 Access points:"
 echo "   MCP App:  http://localhost:9001"
 echo "   UI App:   http://localhost:9003"
 echo ""
-echo "ℹ️  Note: Port 9000 is not touched by these scripts."
-echo ""
 echo "📊 View logs:"
 echo "   tail -f mcp-app.log  # View MCP app logs"
 echo "   tail -f ui-app.log   # View UI app logs"
@@ -89,6 +101,11 @@ echo ""
 echo "🛑 Stop all apps:"
 echo "   ./stop-all-apps.sh"
 echo ""
+if [ -z "$DEV_FLAG" ]; then
+    echo "💡 Tip: Run with --dev flag to enable hot reload:"
+    echo "   ./start-all-apps.sh --dev"
+    echo ""
+fi
 echo "📋 List running sessions:"
 echo "   screen -ls"
 echo ""
