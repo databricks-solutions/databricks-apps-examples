@@ -79,6 +79,7 @@ async def health():
 from typing import List, Optional
 from fastapi import Query, HTTPException
 import pandas as pd
+import numpy as np
 
 
 # =============================================================================
@@ -218,6 +219,68 @@ async def save_skus(request: SKUBatchRequest):
     except Exception as e:
         logger.error(f"Error saving SKUs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ValidateRequest(BaseModel):
+    """Request for data validation"""
+    data: List[dict]
+
+
+@app.post("/api/validate")
+async def validate_data(request: ValidateRequest):
+    """
+    Validate SKU data for correctness.
+    Used by ui_app to validate grid data before saving.
+    """
+    logger.info(f"POST /api/validate - {len(request.data)} records")
+    
+    errors = []
+    warnings = []
+    
+    for i, record in enumerate(request.data):
+        row_num = i + 1
+        
+        # Required field validation
+        if not record.get("SKU_ID"):
+            errors.append({"row": row_num, "field": "SKU_ID", "message": "SKU_ID is required"})
+        
+        # Numeric field validation
+        numeric_fields = ["WEEKLY_UNITS", "UNIT_PRICE", "UNIT_COST", "CURRENT_FACINGS", "PACK_WIDTH_MM"]
+        for field in numeric_fields:
+            value = record.get(field)
+            if value is not None:
+                try:
+                    float(value)
+                except (ValueError, TypeError):
+                    errors.append({"row": row_num, "field": field, "message": f"{field} must be numeric"})
+        
+        # Business rule validation
+        if record.get("UNIT_PRICE") and record.get("UNIT_COST"):
+            try:
+                price = float(record.get("UNIT_PRICE", 0))
+                cost = float(record.get("UNIT_COST", 0))
+                if cost > price:
+                    warnings.append({"row": row_num, "field": "UNIT_COST", "message": "Cost exceeds price (negative margin)"})
+            except (ValueError, TypeError):
+                pass
+        
+        # Facings validation
+        facings = record.get("CURRENT_FACINGS")
+        if facings is not None:
+            try:
+                if int(facings) < 0:
+                    errors.append({"row": row_num, "field": "CURRENT_FACINGS", "message": "Facings cannot be negative"})
+            except (ValueError, TypeError):
+                pass
+    
+    return {
+        "valid": len(errors) == 0,
+        "has_errors": len(errors) > 0,
+        "has_warnings": len(warnings) > 0,
+        "errors": errors,
+        "warnings": warnings,
+        "records_checked": len(request.data)
+    }
 
 
 @app.get("/api/categories")
@@ -363,8 +426,12 @@ async def get_optimization_results(run_id: str):
             "total_weekly_profit": float(ranged_df["EXPECTED_MARGIN_WEEKLY"].sum()) if "EXPECTED_MARGIN_WEEKLY" in ranged_df.columns else 0,
         }
         
+        # Replace NaN/NA values to keep JSON serialization happy
+        df = df.replace({pd.NA: None, np.nan: None})
+        summary = {k: (None if pd.isna(v) else v) for k, v in summary.items()}
+        
         logger.info(f"Returning {len(records)} results for run {run_id}")
-        return {"results": records, "summary": summary, "count": len(records)}
+        return {"results": df.to_dict("records"), "summary": summary, "count": len(df)}
         
     except HTTPException:
         raise

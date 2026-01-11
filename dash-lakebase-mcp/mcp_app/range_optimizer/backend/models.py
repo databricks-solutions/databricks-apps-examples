@@ -153,3 +153,30 @@ class CategoryOut(BaseModel):
 class CategoriesListOut(BaseModel):
     """List of available categories"""
     categories: List[CategoryOut]
+
+
+# ============================================================
+# Validation Models
+# ============================================================
+
+class ValidationIssue(BaseModel):
+    """A single validation issue or warning"""
+    row_index: Optional[int] = None
+    sell_id: Optional[str] = None
+    field: Optional[str] = None
+    severity: str  # "error", "warning", "info"
+    message: str
+
+
+class ValidationResult(BaseModel):
+    """Result of validating grid data"""
+    valid: bool
+    has_errors: bool
+    has_warnings: bool
+    issues: List[ValidationIssue]
+    summary: str
+
+
+class ValidationRequest(BaseModel):
+    """Request model for validation"""
+    data: List[dict]
