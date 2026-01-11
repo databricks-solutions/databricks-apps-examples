@@ -163,13 +163,32 @@ def upload_data_to_uc(
         table_name = db_config.get_full_table_name("forecast_submissions")
         log(f"→ Writing to table: {table_name}")
 
-        insert_overwrite_table(
+        result = insert_overwrite_table(
             df=df,
             table_name=table_name,
             conn=conn,
             overwrite=False,
         )
 
+        # Check if database write was successful
+        if isinstance(result, tuple):
+            # Error occurred - result is (error_msg, 0)
+            error_msg = result[0]
+            log(f"✗ Database write failed: {error_msg}")
+            return_connection(conn)
+            return (
+                dmc.Alert(
+                    children=f"Failed to save forecast data: {error_msg}",
+                    title="Database Error",
+                    color="red",
+                    withCloseButton=True,
+                ),
+                False,
+                no_update,
+                f"Failed to save forecast (ID: {forecast_id})"
+            )
+
+        log(f"✓ Successfully inserted {result} rows to database")
         time.sleep(0.5)
 
         # Trigger Stock Optimization via MCP
