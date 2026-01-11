@@ -120,7 +120,6 @@ def export_data_as_csv(n_clicks: Optional[int]) -> bool:
 
 # 3. Upload data to UC
 @callback(
-    Output("submit-button", "disabled"),
     Output("null-description-box", "children", allow_duplicate=True),
     Output("data-load-overlay", "visible"),
     Output("submitted-forecast-id", "data"),
@@ -151,7 +150,7 @@ def upload_data_to_uc(
     n_clicks: Optional[int],
     store_data: List[Dict[str, Any]],
     upload_clicks: Optional[str],
-) -> Tuple[bool, List[dmc.Alert], bool, Optional[str], Dict, str]:
+) -> Tuple[List[dmc.Alert], bool, Optional[str], Dict, str]:
     log(
         f"CALLBACK: upload_data_to_uc - n_clicks: {n_clicks}, has_upload: {upload_clicks is not None}"
     )
@@ -171,7 +170,7 @@ def upload_data_to_uc(
 
     if has_critical_errors:
         log("→ Disabling submit button due to errors")
-        return True, alerts, False, None, hidden_style, ""
+        return alerts, False, None, hidden_style, ""
 
     if n_clicks:
         log("→ Processing forecast submission")
@@ -201,13 +200,28 @@ def upload_data_to_uc(
         table_name = db_config.optimization_runs_table
         log(f"→ Writing to table: {table_name}")
 
-        insert_overwrite_table(
+        result = insert_overwrite_table(
             df=df,
             table_name=table_name,
             conn=conn,
             overwrite=False,
         )
 
+        if isinstance(result, tuple) and result[1] == 0:
+            # Error occurred
+            error_msg = result[0]
+            log(f"❌ Database write failed: {error_msg}")
+            
+            error_alert = dmc.Alert(
+                title="Database Write Error",
+                color="red",
+                radius="md",
+                children=[f"Failed to save forecast data: {error_msg}"],
+                style={"marginBottom": "8px"},
+            )
+            return [error_alert], False, None, hidden_style, ""
+
+        log(f"✓ Successfully wrote {result} rows to database")
         time.sleep(1.5)
 
         # Step 2: Trigger Backend MCP
@@ -279,9 +293,9 @@ def upload_data_to_uc(
             style={"marginBottom": "8px"},
         )
         log("✓ Range optimization submitted successfully")
-        return True, [success_alert], False, run_id, visible_style, f"Run ID: {run_id}"
+        return [success_alert], False, run_id, visible_style, f"Run ID: {run_id}"
     
-    return False, alerts, False, None, hidden_style, ""
+    return alerts, False, None, hidden_style, ""
 
 
 # 3c. Navigate to results page

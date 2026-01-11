@@ -147,6 +147,7 @@ def validate_grid(store_data: List[Dict[str, Any]]) -> Tuple[bool, List[dmc.Aler
     background=True,
     running=[
         (Output("submission-progress-container", "style"), {"display": "block", "marginTop": "20px"}, {"display": "none"}),
+        (Output("submit-button", "disabled"), True, False),
         (Output("reset-button", "disabled"), True, False),
         (Output("delete-button", "disabled"), True, False),
         (Output("csv-button", "disabled"), True, False),
