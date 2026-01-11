@@ -155,26 +155,29 @@ def render_ai_chat_drawer() -> dmc.Drawer:
         ],
     )
     
-    # Chat messages area with LoadingOverlay wrapping the content
-    chat_scroll = dmc.ScrollArea(
-        id="ai-chat-scroll",
-        h=380,
-        type="hover",
-        offsetScrollbars=True,
-        children=html.Div(
-            id="ai-chat-messages",
-            children=[_welcome_message()],
-            style={"padding": "12px"},
-        ),
-    )
-    
-    chat_area = dmc.LoadingOverlay(
-        id="ai-chat-loading-overlay",
-        visible=False,
-        loaderProps={"type": "bars", "color": "#E21837"},
-        overlayProps={"radius": "sm", "blur": 2},
-        zIndex=10,
-        children=chat_scroll,
+    # Chat messages area with LoadingOverlay
+    chat_area = html.Div(
+        style={"position": "relative"},
+        children=[
+            dmc.LoadingOverlay(
+                id="ai-chat-loading-overlay",
+                visible=False,
+                loaderProps={"type": "bars", "color": "red"},
+                overlayProps={"radius": "sm", "blur": 2},
+                zIndex=10,
+            ),
+            dmc.ScrollArea(
+                id="ai-chat-scroll",
+                h=380,
+                type="hover",
+                offsetScrollbars=True,
+                children=html.Div(
+                    id="ai-chat-messages",
+                    children=[_welcome_message()],
+                    style={"padding": "12px"},
+                ),
+            ),
+        ],
     )
     
     # Quick action chips
