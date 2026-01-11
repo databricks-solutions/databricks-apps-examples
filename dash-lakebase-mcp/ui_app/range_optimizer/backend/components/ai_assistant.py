@@ -83,13 +83,18 @@ def render_key_insights() -> html.Div:
         id="key-insights-container",
         children=[
             # LoadingOverlay wraps the content as children
-            dmc.LoadingOverlay(
-                insights_paper,
-                id="key-insights-loading",
-                visible=False,
-                overlayProps={"opacity": 0.6, "color": "white"},
-                loaderProps={"size": "md", "color": "yellow", "variant": "bars"},
-                zIndex=10,
+            html.Div(
+                style={"position": "relative"},
+                children=[
+                    dmc.LoadingOverlay(
+                        id="key-insights-loading",
+                        visible=False,
+                        overlayProps={"radius": "md", "blur": 1, "opacity": 0.6, "color": "white"},
+                        loaderProps={"size": "md", "color": "yellow", "variant": "bars"},
+                        zIndex=10,
+                    ),
+                    insights_paper,
+                ]
             ),
         ],
         style={"display": "none", "marginBottom": "20px"},
@@ -167,13 +172,18 @@ def render_ai_chat_drawer() -> dmc.Drawer:
         ),
     )
     
-    chat_area = dmc.LoadingOverlay(
-        chat_scroll,
-        id="ai-chat-loading-overlay",
-        visible=False,
-        overlayProps={"opacity": 0.6, "color": "white"},
-        loaderProps={"size": "md", "color": "red", "variant": "bars"},
-        zIndex=10,
+    chat_area = html.Div(
+        style={"position": "relative"},
+        children=[
+            dmc.LoadingOverlay(
+                id="ai-chat-loading-overlay",
+                visible=False,
+                overlayProps={"radius": "sm", "blur": 2, "opacity": 0.6, "color": "white"},
+                loaderProps={"size": "md", "color": "red", "variant": "bars"},
+                zIndex=10,
+            ),
+            chat_scroll,
+        ]
     )
     
     # Quick action chips

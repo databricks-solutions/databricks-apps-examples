@@ -28,7 +28,6 @@ def render_key_insights() -> html.Div:
             html.Div(
                 style={"position": "relative"},
                 children=[
-                    # Loading overlay positioned inside
                     dmc.LoadingOverlay(
                         id="key-insights-loading",
                         visible=False,
