@@ -2,6 +2,43 @@
 
 Excel-like data editing interface with writeback to Databricks Lakebase, powered by Dash.
 
+## 🚀 Quick Start - Local Development
+
+Start both apps with one command:
+
+```bash
+./start-all-apps.sh
+```
+
+Access:
+- **MCP App**: http://localhost:9001
+- **UI App**: http://localhost:8003
+
+Stop all apps:
+```bash
+./stop-all-apps.sh
+```
+
+### Run on custom ports (example: 9000-9004) and restart
+
+```bash
+# stop any existing sessions and free ports
+./stop-all-apps.sh
+
+# start MCP on 9000/9001
+./run-databricks-app-local.sh mcp_app 9000 9001 daveok
+
+# start UI on 9002/9003, pointing at the MCP proxy
+MCP_SERVER_URL=http://localhost:9001 \
+  ./run-databricks-app-local.sh ui_app 9002 9003 daveok
+
+# UI available at http://localhost:9003
+```
+
+**For detailed instructions**, see:
+- [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md) - Complete local development guide
+- [RUN_MULTIPLE_APPS.md](./RUN_MULTIPLE_APPS.md) - Running multiple apps simultaneously
+
 ## Architecture
 
 This application consists of two separate components for security isolation:
@@ -40,17 +77,14 @@ cp .env.example .env
 
 #### Run Dash UI (Main App)
 ```bash
-./run_dev.sh
+./start-ui-app.sh
 # Or manually:
 uv run uvicorn range_optimizer.backend.app:app --reload --port 9000
 ```
 
-Access at: **http://localhost:9000**
-
 #### Run MCP Server (Optional - for AI features)
 ```bash
-./run_mcp.sh
-# Or manually:
+# Manually:
 uv run uvicorn range_optimizer.backend.mcp_standalone:app --reload --port 9001
 ```
 
@@ -64,12 +98,28 @@ Access at: **http://localhost:9001/mcp**
 - 💾 Writeback to Databricks Lakebase
 - 📈 Stock optimization recommendations
 - 🎨 Modern UI with Dash Mantine Components
+- 🔗 Unity Catalog integration for governed data access
+
+### ML Model Integration (NEW!)
+- 🤖 Classical ML model for stock optimization using EOQ
+- 🎯 Feature Store integration with automatic feature lookup
+- 📊 Unity Catalog model registration and governance
+- 🚀 Model serving with real-time inference
+- 📈 Complete feature-to-model lineage tracking
+
+See [notebooks/README.md](./notebooks/README.md) and [DATABRICKS_ML_IMPLEMENTATION.md](./DATABRICKS_ML_IMPLEMENTATION.md) for details.
 
 ### MCP Server
 - 🤖 AI-powered data analysis tools
 - 🔍 Unity Catalog metadata exploration
 - 📊 SQL query execution
 - 🧠 LLM-powered insights
+
+### Unity Catalog Integration
+- ✅ Lakebase database registered as UC catalog (`range_optimizer_catalog`)
+- 🔐 Fine-grained access control via Unity Catalog permissions
+- 🔄 Automatic sync between Postgres and Unity Catalog
+- 📋 Unified governance across all data assets
 
 ## Deployment
 
@@ -86,11 +136,48 @@ databricks bundle deploy --resource apps.range_optimizer_mcp
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
+### Unity Catalog Setup
+
+The Lakebase database is registered with Unity Catalog for governed data access:
+
+```bash
+# Register database to Unity Catalog (already completed)
+uv run python scripts/register_database_to_uc.py
+
+# Verify UC registration and explore catalog
+uv run python scripts/verify_uc_catalog.py
+```
+
+See [UNITY_CATALOG_SETUP.md](UNITY_CATALOG_SETUP.md) for detailed UC configuration and usage.
+
+### ML Model Training & Deployment
+
+Train and deploy the stock optimization ML model:
+
+```bash
+# Run Databricks notebooks in order:
+# 1. notebooks/00_create_feature_tables.py     - Create feature tables
+# 2. notebooks/01_train_stock_optimizer.py     - Train with Feature Store
+# 3. notebooks/02_deploy_serving_endpoint.py   - Deploy to serving endpoint
+
+# View complete documentation
+# See: notebooks/README.md
+# See: DATABRICKS_ML_IMPLEMENTATION.md
+```
+
+**Key Features**:
+- ✅ Feature Store integration with automatic feature lookup
+- ✅ Unity Catalog model registration and governance
+- ✅ Complete feature-to-model lineage tracking
+- ✅ Real-time model serving with auto-scaling
+- ✅ Follows official Databricks best practices
+
 ## Project Structure
 
 ```
-excel-writeback-apx/
-├── src/range_optimizer/
+dash-lakebase-mcp/
+├── mcp_app/
+│   └── range_optimizer/
 │   └── backend/
 │       ├── app.py              # Main Dash application
 │       ├── mcp_standalone.py   # Standalone MCP server
@@ -98,15 +185,21 @@ excel-writeback-apx/
 │       ├── callbacks/          # Dash callbacks
 │       ├── components/         # Dash components
 │       ├── mcp/                # MCP tools
+│       ├── ml/                 # ML models and optimization
 │       ├── database.py         # Lakebase connection
 │       └── models.py           # Data models
+├── notebooks/                  # Databricks ML notebooks
+│   ├── 00_create_feature_tables.py      # Feature Store setup
+│   ├── 01_train_stock_optimizer.py      # Model training
+│   ├── 02_deploy_serving_endpoint.py    # Model deployment
+│   └── README.md                         # Complete ML documentation
 ├── databricks.yml              # DAB configuration
 ├── ui_app/                     # UI app deployment
 │   └── app.yaml               # UI permissions (restricted)
 ├── mcp_app/                    # MCP app deployment
 │   └── app.yaml               # MCP permissions (elevated)
-├── run_dev.sh                  # Dev server script
-└── run_mcp.sh                  # MCP server script
+├── DATABRICKS_ML_IMPLEMENTATION.md      # ML best practices guide
+└── scripts/                    # Utility scripts
 ```
 
 ## Configuration
@@ -183,7 +276,7 @@ uv run pyright src/
 ## Contributing
 
 1. Make changes in feature branch
-2. Test locally with `./run_dev.sh`
+2. Test locally with `./start-all-apps.sh`
 3. Validate DAB: `databricks bundle validate`
 4. Submit PR
 

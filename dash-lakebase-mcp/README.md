@@ -77,7 +77,7 @@ cp .env.example .env
 
 #### Run Dash UI (Main App)
 ```bash
-./run_dev.sh
+./start-ui-app.sh
 # Or manually:
 uv run uvicorn range_optimizer.backend.app:app --reload --port 9000
 ```
@@ -86,8 +86,7 @@ Access at: **http://localhost:9000**
 
 #### Run MCP Server (Optional - for AI features)
 ```bash
-./run_mcp.sh
-# Or manually:
+# Manually:
 uv run uvicorn range_optimizer.backend.mcp_standalone:app --reload --port 9001
 ```
 
@@ -178,8 +177,9 @@ Train and deploy the stock optimization ML model:
 ## Project Structure
 
 ```
-excel-writeback-apx/
-├── src/range_optimizer/
+dash-lakebase-mcp/
+├── mcp_app/
+│   └── range_optimizer/
 │   └── backend/
 │       ├── app.py              # Main Dash application
 │       ├── mcp_standalone.py   # Standalone MCP server
@@ -200,8 +200,6 @@ excel-writeback-apx/
 │   └── app.yaml               # UI permissions (restricted)
 ├── mcp_app/                    # MCP app deployment
 │   └── app.yaml               # MCP permissions (elevated)
-├── run_dev.sh                  # Dev server script
-├── run_mcp.sh                  # MCP server script
 ├── DATABRICKS_ML_IMPLEMENTATION.md      # ML best practices guide
 └── scripts/                    # Utility scripts
 ```
@@ -280,7 +278,7 @@ uv run pyright src/
 ## Contributing
 
 1. Make changes in feature branch
-2. Test locally with `./run_dev.sh`
+2. Test locally with `./start-all-apps.sh`
 3. Validate DAB: `databricks bundle validate`
 4. Submit PR
 
