@@ -220,8 +220,33 @@ def check_table_exists(table_name: str) -> bool:
         return False
 
 
+def ensure_schema_exists(schema_name: str) -> bool:
+    """Ensure a schema exists, creating it if necessary"""
+    if not schema_name or schema_name == "public":
+        return True
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+            conn.commit()
+        logger.info(f"Ensured schema '{schema_name}' exists")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create schema '{schema_name}': {e}")
+        return False
+
+
 def create_table_from_dataframe(table_name: str, df: pd.DataFrame) -> bool:
     """Create a table with schema based on DataFrame columns"""
+    # Extract schema from table name and ensure it exists
+    parts = table_name.split(".")
+    if len(parts) == 2:
+        schema_name = parts[0]
+        if not ensure_schema_exists(schema_name):
+            logger.error(f"Failed to ensure schema '{schema_name}' exists")
+            return False
+    
     columns = []
     for col, dtype in df.dtypes.items():
         if dtype == "int64":
@@ -247,16 +272,39 @@ def create_table_from_dataframe(table_name: str, df: pd.DataFrame) -> bool:
 
 def bulk_insert(table_name: str, df: pd.DataFrame, overwrite: bool = False) -> int:
     """Bulk insert data into a table"""
+    import json
+    
     try:
         # Ensure table exists
         if not check_table_exists(table_name):
             if not create_table_from_dataframe(table_name, df):
                 raise RuntimeError("Failed to create table")
         
-        columns = df.columns.tolist()
+        # Convert any dict/list columns to JSON strings
+        df_copy = df.copy()
+        for col in df_copy.columns:
+            # Check if any value in the column is a dict or list
+            if df_copy[col].apply(lambda x: isinstance(x, (dict, list))).any():
+                df_copy[col] = df_copy[col].apply(
+                    lambda x: json.dumps(x) if isinstance(x, (dict, list)) else x
+                )
+        
+        columns = df_copy.columns.tolist()
         columns_str = ", ".join([f'"{col}"' for col in columns])
-        records = df.replace({pd.NA: None}).to_records(index=False)
-        data = [tuple(row) for row in records]
+        
+        # Convert to list of tuples, handling None and NaN properly
+        data = []
+        for _, row in df_copy.replace({pd.NA: None}).iterrows():
+            row_data = []
+            for val in row:
+                # Convert numpy types to Python native types
+                if pd.isna(val):
+                    row_data.append(None)
+                elif hasattr(val, 'item'):  # numpy scalar
+                    row_data.append(val.item())
+                else:
+                    row_data.append(val)
+            data.append(tuple(row_data))
         
         with get_connection() as conn:
             with conn.cursor() as cur:

@@ -23,7 +23,7 @@ from .models import (
     ForecastSubmissionIn, ForecastSubmissionOut, ForecastSummaryOut, ForecastListOut,
     OptimizationResultsOut, OptimizationSummaryOut, StockOptimizationOut,
     CategoryOut, CategoriesListOut,
-    ValidationRequest, ValidationResult, ValidationIssue,
+    # ValidationRequest, ValidationResult, ValidationIssue - defined in mcp_standalone.py
 )
 from .dependencies import get_obo_ws
 from .config import conf, db_config
@@ -52,142 +52,11 @@ def me(obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)]):
 # ============================================================
 # Validation Endpoint
 # ============================================================
-
-@api.post("/validate", response_model=ValidationResult, operation_id="validateData")
-async def validate_data(request: ValidationRequest):
-    """
-    Validate grid data for errors and warnings.
-    
-    Checks:
-    - Required fields are present
-    - Numeric fields are valid
-    - Categorical fields match valid options
-    - Value ranges are appropriate
-    - No duplicate SKU IDs
-    """
-    issues: List[ValidationIssue] = []
-    data = request.data
-    
-    # Valid values for categorical fields
-    VALID_STATUSES = {"active", "new", "discontinued"}
-    VALID_CATEGORIES = {"Beer & Seltzer", "Hot Sauce", "Ice Cream"}
-    
-    # Required fields for SKU data
-    REQUIRED_FIELDS = ["SKU_ID", "SKU_NAME", "CATEGORY", "STATUS", 
-                       "WEEKLY_UNITS", "CURRENT_FACINGS", "PACK_WIDTH_MM"]
-    
-    INTEGER_FIELDS = {"WEEKLY_UNITS", "CURRENT_FACINGS", "PACK_WIDTH_MM"}
-    
-    # Check for empty data
-    if not data:
-        issues.append(ValidationIssue(
-            severity="error",
-            message="No data to validate. Please add SKU records."
-        ))
-        return ValidationResult(
-            valid=False,
-            has_errors=True,
-            has_warnings=False,
-            issues=issues,
-            summary="No data provided"
-        )
-    
-    # Check for duplicate SKU IDs
-    sku_id_counts = {}
-    for row in data:
-        sku_id = row.get("SKU_ID")
-        if sku_id:
-            sku_id_counts[sku_id] = sku_id_counts.get(sku_id, 0) + 1
-    
-    duplicate_sku_ids = [sku_id for sku_id, count in sku_id_counts.items() if count > 1]
-    if duplicate_sku_ids:
-        issues.append(ValidationIssue(
-            severity="error",
-            message=f"Duplicate SKU IDs found: {', '.join(duplicate_sku_ids)}"
-        ))
-    
-    # Validate each row
-    for i, row in enumerate(data):
-        sku_id = row.get("SKU_ID", f"Row {i+1}")
-        
-        # Check required fields
-        missing_fields = [field for field in REQUIRED_FIELDS if not row.get(field)]
-        if missing_fields:
-            issues.append(ValidationIssue(
-                row_index=i,
-                sell_id=sku_id,
-                severity="error",
-                message=f"Missing required fields: {', '.join(missing_fields)}"
-            ))
-        
-        # Validate integer fields
-        for field in INTEGER_FIELDS:
-            value = row.get(field)
-            if value is not None and value != "":
-                try:
-                    int_value = int(value)
-                    if int_value < 0:
-                        issues.append(ValidationIssue(
-                            row_index=i,
-                            sell_id=sku_id,
-                            field=field,
-                            severity="error",
-                            message=f"{field} must be non-negative (got {int_value})"
-                        ))
-                except (ValueError, TypeError):
-                    issues.append(ValidationIssue(
-                        row_index=i,
-                        sell_id=sku_id,
-                        field=field,
-                        severity="error",
-                        message=f"{field} must be an integer (got {value})"
-                    ))
-        
-        # Validate STATUS field
-        status = row.get("STATUS")
-        if status and status not in VALID_STATUSES:
-            issues.append(ValidationIssue(
-                row_index=i,
-                sell_id=sku_id,
-                field="STATUS",
-                severity="warning",
-                message=f"STATUS '{status}' not in valid options: {', '.join(VALID_STATUSES)}"
-            ))
-        
-        # Validate CATEGORY field
-        category = row.get("CATEGORY")
-        if category and category not in VALID_CATEGORIES:
-            issues.append(ValidationIssue(
-                row_index=i,
-                sell_id=sku_id,
-                field="CATEGORY",
-                severity="warning",
-                message=f"CATEGORY '{category}' not in valid options: {', '.join(VALID_CATEGORIES)}"
-            ))
-    
-    # Count errors and warnings
-    errors = [issue for issue in issues if issue.severity == "error"]
-    warnings = [issue for issue in issues if issue.severity == "warning"]
-    
-    has_errors = len(errors) > 0
-    has_warnings = len(warnings) > 0
-    valid = not has_errors
-    
-    # Build summary
-    if valid and not has_warnings:
-        summary = f"✓ Validation passed! {len(data)} SKU records are ready for submission."
-    elif valid and has_warnings:
-        summary = f"⚠ {len(warnings)} warning(s) found. You can still submit."
-    else:
-        summary = f"✗ {len(errors)} error(s) found. Please fix before submitting."
-    
-    return ValidationResult(
-        valid=valid,
-        has_errors=has_errors,
-        has_warnings=has_warnings,
-        issues=issues,
-        summary=summary
-    )
+# NOTE: The /api/validate endpoint is defined in mcp_standalone.py
+# which is the actual app entry point. This router is NOT loaded.
+# Keeping this commented out to avoid confusion about duplicates.
+#
+# The validation logic lives in mcp_standalone.py:validate_data()
 
 
 # ============================================================

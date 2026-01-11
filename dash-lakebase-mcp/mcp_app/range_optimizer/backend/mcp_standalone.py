@@ -234,25 +234,44 @@ async def validate_data(request: ValidateRequest):
     """
     logger.info(f"POST /api/validate - {len(request.data)} records")
     
-    errors = []
-    warnings = []
+    issues = []
+    
+    # Valid values for categorical fields
+    VALID_SEGMENTS_BY_CATEGORY = {
+        "Beer & Seltzer": {"Craft Beer", "Hard Seltzer"},
+        "Hot Sauce": {"Asian Style", "Louisiana Style", "Mexican Style"},
+        "Ice Cream": {"Premium Pints", "Family Tubs"},
+    }
+    ALL_VALID_SEGMENTS = {"Craft Beer", "Hard Seltzer", "Asian Style", "Louisiana Style", 
+                          "Mexican Style", "Premium Pints", "Family Tubs"}
     
     for i, record in enumerate(request.data):
         row_num = i + 1
+        sku_id = record.get("SKU_ID", f"Row {row_num}")
         
         # Required field validation
         if not record.get("SKU_ID"):
-            errors.append({"row": row_num, "field": "SKU_ID", "message": "SKU_ID is required"})
+            issues.append({"row_index": i, "sell_id": sku_id, "field": "SKU_ID", 
+                          "severity": "error", "message": "SKU_ID is required"})
         
         # Numeric field validation
         numeric_fields = ["WEEKLY_UNITS", "UNIT_PRICE", "UNIT_COST", "CURRENT_FACINGS", "PACK_WIDTH_MM"]
         for field in numeric_fields:
             value = record.get(field)
-            if value is not None:
+            if value is not None and value != "":
                 try:
                     float(value)
                 except (ValueError, TypeError):
-                    errors.append({"row": row_num, "field": field, "message": f"{field} must be numeric"})
+                    issues.append({"row_index": i, "sell_id": sku_id, "field": field, 
+                                  "severity": "error", "message": f"{field} must be numeric"})
+        
+        # Check for missing required numeric fields
+        required_numeric = ["WEEKLY_UNITS", "CURRENT_FACINGS"]
+        for field in required_numeric:
+            value = record.get(field)
+            if value is None or value == "":
+                issues.append({"row_index": i, "sell_id": sku_id, "field": field,
+                              "severity": "error", "message": f"{field} is required"})
         
         # Business rule validation
         if record.get("UNIT_PRICE") and record.get("UNIT_COST"):
@@ -260,25 +279,57 @@ async def validate_data(request: ValidateRequest):
                 price = float(record.get("UNIT_PRICE", 0))
                 cost = float(record.get("UNIT_COST", 0))
                 if cost > price:
-                    warnings.append({"row": row_num, "field": "UNIT_COST", "message": "Cost exceeds price (negative margin)"})
+                    issues.append({"row_index": i, "sell_id": sku_id, "field": "UNIT_COST",
+                                  "severity": "warning", "message": "Cost exceeds price (negative margin)"})
             except (ValueError, TypeError):
                 pass
         
         # Facings validation
         facings = record.get("CURRENT_FACINGS")
-        if facings is not None:
+        if facings is not None and facings != "":
             try:
                 if int(facings) < 0:
-                    errors.append({"row": row_num, "field": "CURRENT_FACINGS", "message": "Facings cannot be negative"})
+                    issues.append({"row_index": i, "sell_id": sku_id, "field": "CURRENT_FACINGS",
+                                  "severity": "error", "message": "Facings cannot be negative"})
             except (ValueError, TypeError):
                 pass
+        
+        # SEGMENT validation
+        segment = record.get("SEGMENT")
+        category = record.get("CATEGORY")
+        if not segment or segment == "":
+            issues.append({"row_index": i, "sell_id": sku_id, "field": "SEGMENT",
+                          "severity": "error", "message": "SEGMENT is required"})
+        elif segment not in ALL_VALID_SEGMENTS:
+            issues.append({"row_index": i, "sell_id": sku_id, "field": "SEGMENT",
+                          "severity": "error", "message": f"Invalid SEGMENT: {segment}"})
+        elif category and category in VALID_SEGMENTS_BY_CATEGORY:
+            valid_for_category = VALID_SEGMENTS_BY_CATEGORY[category]
+            if segment not in valid_for_category:
+                issues.append({"row_index": i, "sell_id": sku_id, "field": "SEGMENT",
+                              "severity": "error", 
+                              "message": f"SEGMENT '{segment}' not valid for CATEGORY '{category}'"})
+    
+    errors = [i for i in issues if i.get("severity") == "error"]
+    warnings = [i for i in issues if i.get("severity") == "warning"]
+    
+    has_errors = len(errors) > 0
+    has_warnings = len(warnings) > 0
+    valid = not has_errors
+    
+    if valid and not has_warnings:
+        summary = f"✓ Validation passed! {len(request.data)} SKU records are ready for submission."
+    elif valid and has_warnings:
+        summary = f"⚠ {len(warnings)} warning(s) found. You can still submit."
+    else:
+        summary = f"✗ {len(errors)} error(s) found. Please fix before submitting."
     
     return {
-        "valid": len(errors) == 0,
-        "has_errors": len(errors) > 0,
-        "has_warnings": len(warnings) > 0,
-        "errors": errors,
-        "warnings": warnings,
+        "valid": valid,
+        "has_errors": has_errors,
+        "has_warnings": has_warnings,
+        "issues": issues,
+        "summary": summary,
         "records_checked": len(request.data)
     }
 
