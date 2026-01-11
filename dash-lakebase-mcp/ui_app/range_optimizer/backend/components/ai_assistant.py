@@ -22,75 +22,74 @@ SUGGESTED_QUESTIONS = [
 def render_key_insights() -> html.Div:
     """Render the Key Insights panel that appears at the top of results."""
     
+    # Content inside the Paper
+    insights_paper = dmc.Paper(
+        [
+            dmc.Group(
+                [
+                    dmc.Group(
+                        [
+                            dmc.ThemeIcon(
+                                html.Span("💡", style={"fontSize": "16px"}),
+                                size="md",
+                                radius="md",
+                                variant="light",
+                                color="yellow",
+                            ),
+                            dmc.Text("Key Insights", fw=700, size="md"),
+                        ],
+                        gap="xs",
+                    ),
+                    dmc.Group([
+                        dmc.Badge(
+                            "MCP",
+                            color="green",
+                            variant="filled",
+                            size="sm",
+                            leftSection=html.Span("🔗", style={"fontSize": "10px"}),
+                        ),
+                        dmc.Badge("AI Generated", color="red", variant="dot", size="sm"),
+                    ], gap="xs"),
+                ],
+                justify="space-between",
+            ),
+            dmc.Space(h=12),
+            html.Div(
+                id="key-insights-content",
+                children=[
+                    dmc.Group([
+                        dmc.Loader(size="sm", color="green", type="bars"),
+                        dmc.Stack([
+                            dmc.Text("Querying MCP Server...", size="sm", fw=500),
+                            dmc.Text("get_optimization_results → llm_generate", size="xs", c="dimmed", ff="monospace"),
+                        ], gap=2),
+                    ], gap="sm"),
+                ],
+            ),
+        ],
+        p="md",
+        radius="md",
+        withBorder=True,
+        style={
+            "backgroundColor": "#fffef5",
+            "borderColor": "#ffd43b",
+            "borderWidth": "1px",
+            "minHeight": "100px",
+            "position": "relative",
+        },
+    )
+    
     return html.Div(
         id="key-insights-container",
         children=[
-            html.Div(
-                style={"position": "relative"},
-                children=[
-                    # Loading overlay positioned inside
-                    dmc.LoadingOverlay(
-                        id="key-insights-loading",
-                        visible=False,
-                        loaderProps={"type": "bars", "color": "yellow"},
-                        overlayProps={"radius": "md", "blur": 1},
-                        zIndex=10,
-                    ),
-                    # Content
-                    dmc.Paper(
-                        [
-                            dmc.Group(
-                                [
-                                    dmc.Group(
-                                        [
-                                            dmc.ThemeIcon(
-                                                html.Span("💡", style={"fontSize": "16px"}),
-                                                size="md",
-                                                radius="md",
-                                                variant="light",
-                                                color="yellow",
-                                            ),
-                                            dmc.Text("Key Insights", fw=700, size="md"),
-                                        ],
-                                        gap="xs",
-                                    ),
-                                    dmc.Group([
-                                        dmc.Badge(
-                                            "MCP",
-                                            color="green",
-                                            variant="filled",
-                                            size="sm",
-                                            leftSection=html.Span("🔗", style={"fontSize": "10px"}),
-                                        ),
-                                        dmc.Badge("AI Generated", color="red", variant="dot", size="sm"),
-                                    ], gap="xs"),
-                                ],
-                                justify="space-between",
-                            ),
-                            dmc.Space(h=12),
-                            html.Div(
-                                id="key-insights-content",
-                                children=[
-                                    dmc.Group([
-                                        dmc.Loader(size="sm", color="green", type="bars"),
-                                        dmc.Stack([
-                                            dmc.Text("Querying MCP Server...", size="sm", fw=500),
-                                            dmc.Text("get_optimization_results → llm_generate", size="xs", c="dimmed", ff="monospace"),
-                                        ], gap=2),
-                                    ], gap="sm"),
-                                ],
-                            ),
-                        ],
-                        p="md",
-                        radius="md",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "#fffef5",
-                            "borderColor": "#ffd43b",
-                            "borderWidth": "1px",
-                        },
-                    ),
-                ],
+            # LoadingOverlay wraps the content as children
+            dmc.LoadingOverlay(
+                insights_paper,
+                id="key-insights-loading",
+                visible=False,
+                overlayProps={"opacity": 0.6, "color": "white"},
+                loaderProps={"size": "md", "color": "yellow", "variant": "bars"},
+                zIndex=10,
             ),
         ],
         style={"display": "none", "marginBottom": "20px"},
@@ -155,29 +154,26 @@ def render_ai_chat_drawer() -> dmc.Drawer:
         ],
     )
     
-    # Chat messages area with LoadingOverlay
-    chat_area = html.Div(
-        style={"position": "relative"},
-        children=[
-            dmc.LoadingOverlay(
-                id="ai-chat-loading-overlay",
-                visible=False,
-                loaderProps={"type": "bars", "color": "red"},
-                overlayProps={"radius": "sm", "blur": 2},
-                zIndex=10,
-            ),
-            dmc.ScrollArea(
-                id="ai-chat-scroll",
-                h=380,
-                type="hover",
-                offsetScrollbars=True,
-                children=html.Div(
-                    id="ai-chat-messages",
-                    children=[_welcome_message()],
-                    style={"padding": "12px"},
-                ),
-            ),
-        ],
+    # Chat messages area with LoadingOverlay wrapping content
+    chat_scroll = dmc.ScrollArea(
+        id="ai-chat-scroll",
+        h=380,
+        type="hover",
+        offsetScrollbars=True,
+        children=html.Div(
+            id="ai-chat-messages",
+            children=[_welcome_message()],
+            style={"padding": "12px"},
+        ),
+    )
+    
+    chat_area = dmc.LoadingOverlay(
+        chat_scroll,
+        id="ai-chat-loading-overlay",
+        visible=False,
+        overlayProps={"opacity": 0.6, "color": "white"},
+        loaderProps={"size": "md", "color": "red", "variant": "bars"},
+        zIndex=10,
     )
     
     # Quick action chips
