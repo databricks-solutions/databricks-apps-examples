@@ -1,3 +1,4 @@
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -37,4 +38,10 @@ node_modules/
 .apx/
 
 # UI dist folder
-src/my_app/__dist__/
+src/my_app/__dist__
+
+# Logs and databases
+*.log
+*.db
+*.db-shm
+*.db-wal
