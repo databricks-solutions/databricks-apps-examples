@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from typing import ClassVar, Optional
 import os
 
-# App metadata (no longer using apx)
+# App metadata
 app_name = "excel-writeback"
 app_slug = "excel_writeback"
 api_prefix = "/api"
