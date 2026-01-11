@@ -7,15 +7,48 @@ isolation and resource management.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from .mcp import create_mcp_app
 from .logger import logger
 from .config import conf
 from .database import initialize_connection_pool, close_all_connections
+from .audit_log import (
+    log_forecast_submitted,
+    log_forecast_fetched,
+    log_insights_generated,
+    log_chat_message,
+    log_skus_fetched,
+    log_skus_saved,
+)
 from pydantic import BaseModel
 import mlflow
 import os
 from openai import OpenAI
+
+
+def _extract_request_metadata(request: Request) -> dict:
+    """Extract audit metadata from the FastAPI request."""
+    # Get client IP (handles proxies via X-Forwarded-For)
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else request.client.host if request.client else None
+    
+    # Get user agent
+    user_agent = request.headers.get("user-agent")
+    
+    # Get user email from headers (Databricks Apps inject user headers)
+    # Common headers: X-Forwarded-Email, X-User-Email, X-Auth-Request-Email
+    user_email = (
+        request.headers.get("x-forwarded-email") or
+        request.headers.get("x-user-email") or
+        request.headers.get("x-auth-request-email") or
+        request.headers.get("x-databricks-user-email")
+    )
+    
+    return {
+        "client_ip": client_ip,
+        "user_agent": user_agent,
+        "user_email": user_email,
+    }
 
 
 @asynccontextmanager
@@ -32,18 +65,24 @@ async def lifespan(app: FastAPI):
     # Enable MLflow GenAI Tracing for Foundation Models
     logger.info("Enabling MLflow GenAI tracing")
     try:
+        # Set tracking URI to Databricks workspace
+        # This is required to log traces to the Databricks MLflow service
+        mlflow.set_tracking_uri("databricks")
+        logger.info("MLflow tracking URI set to Databricks")
+        
         # Set experiment from environment variable (injected by Databricks Apps)
         experiment_id = os.getenv("MLFLOW_EXPERIMENT_ID")
         if experiment_id:
             mlflow.set_experiment(experiment_id=experiment_id)
             logger.info(f"MLflow experiment set to ID: {experiment_id}")
         else:
-            # Fallback for local development
-            mlflow.set_experiment("/Users/david.okeeffe@databricks.com/range-optimizer-mcp-traces")
-            logger.info("MLflow experiment set to fallback path (local dev)")
+            # Fallback for local development - use /Shared/ path for SP access
+            mlflow.set_experiment("/Shared/range-optimizer-mcp-traces")
+            logger.info("MLflow experiment set to fallback path (/Shared/)")
         
         # Using openai autolog as Databricks FM uses openai-compatible interface
         mlflow.openai.autolog()
+        logger.info("MLflow OpenAI autolog enabled")
     except Exception as e:
         logger.warning(f"Failed to enable MLflow tracing: {e}")
     
@@ -150,6 +189,7 @@ class OptimizationRunRequest(BaseModel):
 
 @app.get("/api/skus")
 async def get_skus(
+    request: Request,
     category: Optional[str] = Query(None, description="Filter by category"),
     limit: Optional[int] = Query(None, description="Limit results")
 ):
@@ -163,6 +203,9 @@ async def get_skus(
     
     table = db_config.dim_sku_table
     logger.info(f"GET /api/skus - category: {category}, limit: {limit}")
+    
+    # Extract request metadata for audit logging
+    audit_meta = _extract_request_metadata(request)
     
     try:
         # Initialize table with sample data if it doesn't exist
@@ -189,10 +232,26 @@ async def get_skus(
             data = INITIAL_DATA
             if category and category != "All":
                 data = [r for r in data if r.get("CATEGORY") == category]
+            
+            # Log audit event
+            log_skus_fetched(
+                sku_count=len(data),
+                category=category,
+                source="sample",
+                **audit_meta
+            )
             return {"skus": data, "count": len(data), "source": "sample"}
         
         records = df.to_dict("records")
         logger.info(f"Returning {len(records)} SKUs")
+        
+        # Log audit event
+        log_skus_fetched(
+            sku_count=len(records),
+            category=category,
+            source="database",
+            **audit_meta
+        )
         return {"skus": records, "count": len(records), "source": "database"}
         
     except Exception as e:
@@ -202,11 +261,19 @@ async def get_skus(
         data = INITIAL_DATA
         if category and category != "All":
             data = [r for r in data if r.get("CATEGORY") == category]
+        
+        # Log audit event even for fallback
+        log_skus_fetched(
+            sku_count=len(data),
+            category=category,
+            source="fallback",
+            **audit_meta
+        )
         return {"skus": data, "count": len(data), "source": "fallback", "error": str(e)}
 
 
 @app.post("/api/skus")
-async def save_skus(request: SKUBatchRequest):
+async def save_skus(request: Request, sku_request: SKUBatchRequest):
     """
     Save SKU data to dim_sku table.
     Used by ui_app for data persistence.
@@ -215,14 +282,24 @@ async def save_skus(request: SKUBatchRequest):
     from .config import db_config
     
     table = db_config.dim_sku_table
-    logger.info(f"POST /api/skus - {len(request.records)} records, overwrite: {request.overwrite}")
+    logger.info(f"POST /api/skus - {len(sku_request.records)} records, overwrite: {sku_request.overwrite}")
+    
+    # Extract request metadata for audit logging
+    audit_meta = _extract_request_metadata(request)
     
     try:
-        records = [r.model_dump(exclude_none=True) for r in request.records]
+        records = [r.model_dump(exclude_none=True) for r in sku_request.records]
         df = pd.DataFrame(records)
         
-        rows = bulk_insert(table, df, overwrite=request.overwrite)
+        rows = bulk_insert(table, df, overwrite=sku_request.overwrite)
         logger.info(f"Saved {rows} SKU records")
+        
+        # Log audit event
+        log_skus_saved(
+            sku_count=rows,
+            overwrite=sku_request.overwrite,
+            **audit_meta
+        )
         
         return {"success": True, "rows_affected": rows, "message": f"Saved {rows} records"}
         
@@ -438,7 +515,7 @@ async def get_optimization_runs(limit: int = Query(20, description="Maximum runs
 
 
 @app.get("/api/optimization-runs/{run_id}")
-async def get_optimization_results(run_id: str):
+async def get_optimization_results(request: Request, run_id: str):
     """
     Get optimization results for a specific run.
     Used by ui_app results page grid.
@@ -447,6 +524,9 @@ async def get_optimization_results(run_id: str):
     from .config import db_config
     
     logger.info(f"GET /api/optimization-runs/{run_id}")
+    
+    # Extract request metadata for audit logging
+    audit_meta = _extract_request_metadata(request)
     
     try:
         table = db_config.opt_planogram_table
@@ -491,6 +571,14 @@ async def get_optimization_results(run_id: str):
         df = df.replace({pd.NA: None, np.nan: None})
         summary = {k: (None if pd.isna(v) else v) for k, v in summary.items()}
         
+        # Log audit event - forecast fetched
+        log_forecast_fetched(
+            run_id=run_id,
+            sku_count=len(df),
+            request_path=f"/api/optimization-runs/{run_id}",
+            **audit_meta
+        )
+        
         logger.info(f"Returning {len(records)} results for run {run_id}")
         return {"results": df.to_dict("records"), "summary": summary, "count": len(df)}
         
@@ -502,7 +590,7 @@ async def get_optimization_results(run_id: str):
 
 
 @app.post("/api/optimization-runs")
-async def submit_optimization_run(request: OptimizationRunRequest):
+async def submit_optimization_run(request: Request, opt_request: OptimizationRunRequest):
     """
     Submit a new optimization run.
     Saves data to optimization_runs table and triggers optimization.
@@ -513,7 +601,10 @@ async def submit_optimization_run(request: OptimizationRunRequest):
     import datetime
     import uuid
     
-    logger.info(f"POST /api/optimization-runs - {len(request.records)} SKUs")
+    logger.info(f"POST /api/optimization-runs - {len(opt_request.records)} SKUs")
+    
+    # Extract request metadata for audit logging
+    audit_meta = _extract_request_metadata(request)
     
     try:
         # Generate run ID
@@ -521,8 +612,15 @@ async def submit_optimization_run(request: OptimizationRunRequest):
         timestamp = datetime.datetime.now().isoformat()
         
         # Prepare data
-        records = [r.model_dump(exclude_none=True) for r in request.records]
+        records = [r.model_dump(exclude_none=True) for r in opt_request.records]
         df = pd.DataFrame(records)
+        
+        # Filter out AG-Grid internal columns (start with underscore)
+        internal_cols = [c for c in df.columns if c.startswith('_')]
+        if internal_cols:
+            logger.info(f"Filtering out internal columns: {internal_cols}")
+            df = df.drop(columns=internal_cols)
+        
         df["RUN_ID"] = run_id
         df["SUBMISSION_TIMESTAMP"] = timestamp
         df["ROW_ID"] = [f"{run_id}-{i+1:04d}" for i in range(len(df))]
@@ -534,6 +632,13 @@ async def submit_optimization_run(request: OptimizationRunRequest):
         
         # Trigger optimization
         result = run_range_optimization_logic(run_id, "stock-optimization-model")
+        
+        # Log audit event - forecast submitted
+        log_forecast_submitted(
+            run_id=run_id,
+            sku_count=rows,
+            **audit_meta
+        )
         
         return {
             "run_id": run_id,
@@ -561,15 +666,18 @@ async def run_optimization(request: OptimizationRequest):
 
 @app.post("/api/insights")
 @mlflow.trace(name="generate_insights")
-async def generate_insights(request: InsightsRequest):
+async def generate_insights(request: Request, insights_request: InsightsRequest):
     """Generate AI insights for an optimization run's planogram recommendations."""
     # Add context to trace
-    mlflow.update_current_trace(tags={"context": "range optimizer", "run_id": request.forecast_id})
+    mlflow.update_current_trace(tags={"context": "range optimizer", "run_id": insights_request.forecast_id})
     from .database import query_df, get_workspace_client, check_table_exists
     from .config import db_config
     
-    run_id = request.forecast_id  # Keep param name for API compatibility
+    run_id = insights_request.forecast_id  # Keep param name for API compatibility
     logger.info(f"Generating insights for optimization run: {run_id}")
+    
+    # Extract request metadata for audit logging
+    audit_meta = _extract_request_metadata(request)
     
     try:
         # 1. Fetch optimization results from opt_recommended_planogram
@@ -671,6 +779,13 @@ Format as bullet points. Keep each insight to 1-2 sentences."""
             insights = response.choices[0].message.content
             logger.info(f"Generated insights: {len(insights)} chars")
             
+            # Log audit event - insights generated
+            log_insights_generated(
+                run_id=run_id,
+                source="mcp-server",
+                **audit_meta
+            )
+            
             return {
                 "forecast_id": run_id,
                 "insights": insights,
@@ -686,6 +801,13 @@ Format as bullet points. Keep each insight to 1-2 sentences."""
 • **Profit Potential**: Expected weekly profit of ${total_weekly_profit:,.2f} (${total_weekly_profit * 52:,.2f} annually).
 • **Assortment Changes**: {skus_added} SKUs added, {skus_removed} removed, {skus_increased + skus_decreased} facings adjusted.
 • **Top Performers**: Focus on {', '.join(str(s) for s in top_skus[:2])} for highest margin contribution."""
+            
+            # Log audit event - insights generated (fallback)
+            log_insights_generated(
+                run_id=run_id,
+                source="fallback",
+                **audit_meta
+            )
             
             return {
                 "forecast_id": run_id,
@@ -707,16 +829,19 @@ Format as bullet points. Keep each insight to 1-2 sentences."""
 
 @app.post("/api/chat")
 @mlflow.trace(name="chat_assistant")
-async def chat(request: ChatRequest):
+async def chat(request: Request, chat_request: ChatRequest):
     """Handle chat messages with AI responses using planogram optimization data."""
     # Add context to trace
-    mlflow.update_current_trace(tags={"context": "range optimizer", "run_id": request.forecast_id})
+    mlflow.update_current_trace(tags={"context": "range optimizer", "run_id": chat_request.forecast_id})
     from .database import query_df, get_workspace_client, check_table_exists
     from .config import db_config
     
-    run_id = request.forecast_id  # Keep param name for API compatibility
+    run_id = chat_request.forecast_id  # Keep param name for API compatibility
     logger.info(f"Chat request for optimization run: {run_id}")
-    logger.info(f"Question: {request.question[:100]}...")
+    logger.info(f"Question: {chat_request.question[:100]}...")
+    
+    # Extract request metadata for audit logging
+    audit_meta = _extract_request_metadata(request)
     
     try:
         # 1. Fetch relevant optimization data from opt_recommended_planogram
@@ -725,7 +850,7 @@ async def chat(request: ChatRequest):
         if not check_table_exists(table):
             return {
                 "forecast_id": run_id,
-                "question": request.question,
+                "question": chat_request.question,
                 "answer": "No optimization data available yet. Submit an optimization run to generate planogram recommendations.",
                 "source": "info",
                 "tools_used": []
@@ -737,7 +862,7 @@ async def chat(request: ChatRequest):
         if df.empty:
             return {
                 "forecast_id": run_id,
-                "question": request.question,
+                "question": chat_request.question,
                 "answer": "No optimization data found for this run. Please select a different run or submit a new optimization.",
                 "source": "info",
                 "tools_used": []
@@ -800,7 +925,7 @@ Summary:
 Category Breakdown:
 {cat_summary}
 
-{f"Previous context: {request.context}" if request.context else ""}
+{f"Previous context: {chat_request.context}" if chat_request.context else ""}
 
 SKU-level planogram recommendations are available for detailed queries."""
 
@@ -809,7 +934,7 @@ SKU-level planogram recommendations are available for detailed queries."""
                 model="databricks-meta-llama-3-3-70b-instruct",
                 messages=[
                     {"role": "system", "content": f"You are a retail range optimization assistant helping with planogram and assortment decisions. Answer questions based on this data:\n{data_context}"},
-                    {"role": "user", "content": request.question}
+                    {"role": "user", "content": chat_request.question}
                 ],
                 max_tokens=500
             )
@@ -817,9 +942,17 @@ SKU-level planogram recommendations are available for detailed queries."""
             answer = response.choices[0].message.content
             logger.info(f"Generated answer: {len(answer)} chars")
             
+            # Log audit event - chat message
+            log_chat_message(
+                run_id=run_id,
+                question=chat_request.question,
+                source="mcp-server",
+                **audit_meta
+            )
+            
             return {
                 "forecast_id": run_id,
-                "question": request.question,
+                "question": chat_request.question,
                 "answer": answer,
                 "source": "mcp-server",
                 "tools_used": ["get_optimization_results", "llm_chat"]
@@ -828,10 +961,18 @@ SKU-level planogram recommendations are available for detailed queries."""
         except Exception as llm_err:
             logger.warning(f"LLM call failed: {llm_err}")
             
+            # Log audit event - chat message (fallback)
+            log_chat_message(
+                run_id=run_id,
+                question=chat_request.question,
+                source="fallback",
+                **audit_meta
+            )
+            
             # Fallback response
             return {
                 "forecast_id": run_id,
-                "question": request.question,
+                "question": chat_request.question,
                 "answer": f"I'm having trouble connecting to the AI service. Here's what I know about this optimization run:\n\n• {summary['skus_ranged']} SKUs in recommended range (of {summary['total_skus']} evaluated)\n• {summary['total_facings']:.0f} total facings allocated\n• ${summary['weekly_profit']:,.2f} expected weekly profit\n\nPlease try again or ask a more specific question.",
                 "source": "fallback",
                 "tools_used": ["get_optimization_results"]
@@ -841,7 +982,7 @@ SKU-level planogram recommendations are available for detailed queries."""
         logger.error(f"Error in chat: {e}")
         return {
             "forecast_id": run_id,
-            "question": request.question,
+            "question": chat_request.question,
             "answer": f"Error processing your question: {str(e)}",
             "source": "error",
             "error": str(e),

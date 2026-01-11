@@ -154,6 +154,9 @@ class DatabaseConfig(BaseSettings):
     # App-specific tables (for user submissions)
     TABLE_OPTIMIZATION_RUNS: str = "optimization_runs"
     
+    # Audit log table
+    TABLE_AUDIT_LOG: str = "app_audit_log"
+    
     def get_full_table_name(self, table_name: str) -> str:
         """Get full table name with schema prefix"""
         if self.schema_name and self.schema_name != "public":
@@ -176,6 +179,10 @@ class DatabaseConfig(BaseSettings):
     @property
     def opt_run_summary_table(self) -> str:
         return self.get_full_table_name(self.TABLE_OPT_RUN_SUMMARY)
+    
+    @property
+    def audit_log_table(self) -> str:
+        return self.get_full_table_name(self.TABLE_AUDIT_LOG)
 
 
 class AppConfig(BaseSettings):

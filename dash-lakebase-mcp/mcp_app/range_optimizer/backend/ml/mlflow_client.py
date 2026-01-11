@@ -2,6 +2,10 @@
 MLflow Model Serving Client
 
 This module provides a client for calling Databricks MLflow Model Serving endpoints.
+
+Schema Alignment:
+- Input: SKU_ID, SKU_NAME, CURRENT_FACINGS (features auto-fetched from Feature Store)
+- Output: RECOMMENDED_FACINGS, FACINGS_CHANGE, CHANGE_TYPE, EXPECTED_WEEKLY_PROFIT, etc.
 """
 
 import requests
@@ -14,7 +18,7 @@ from databricks.sdk import WorkspaceClient
 class MLflowModelClient:
     """Client for calling MLflow model serving endpoints in Databricks"""
 
-    def __init__(self, endpoint_name: str = "stock-optimization-model"):
+    def __init__(self, endpoint_name: str = "range-optimizer-model"):
         """
         Initialize the MLflow model client.
 
@@ -28,16 +32,15 @@ class MLflowModelClient:
 
     def predict(self, forecast_data: pd.DataFrame) -> pd.DataFrame:
         """
-        Call the MLflow model serving endpoint to get stock optimization predictions.
+        Call the MLflow model serving endpoint to get range optimization predictions.
 
         Args:
-            forecast_data: DataFrame with forecast data
+            forecast_data: DataFrame with SKU data (SKU_ID required, features auto-fetched)
 
         Returns:
             DataFrame with optimization results
         """
         # Prepare the request payload
-        # Convert DataFrame to the format expected by the model
         data_records = forecast_data.to_dict(orient='records')
 
         payload = {
@@ -108,10 +111,10 @@ class FallbackOptimizer:
     @staticmethod
     def optimize(forecast_data: pd.DataFrame) -> pd.DataFrame:
         """
-        Perform stock optimization locally as a fallback.
+        Perform range optimization locally as a fallback.
 
         Args:
-            forecast_data: DataFrame with forecast data
+            forecast_data: DataFrame with SKU forecast data
 
         Returns:
             DataFrame with optimization results
@@ -125,13 +128,13 @@ class FallbackOptimizer:
 
 class HybridStockOptimizer:
     """
-    Hybrid stock optimizer that tries to use MLflow endpoint first,
+    Hybrid optimizer that tries to use MLflow endpoint first,
     falls back to local computation if endpoint is unavailable.
     """
 
     def __init__(
         self,
-        endpoint_name: str = "stock-optimization-model",
+        endpoint_name: str = "range-optimizer-model",
         use_fallback: bool = True
     ):
         """
@@ -153,10 +156,10 @@ class HybridStockOptimizer:
 
     def optimize(self, forecast_data: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         """
-        Optimize inventory using MLflow endpoint or local fallback.
+        Optimize facings using MLflow endpoint or local fallback.
 
         Args:
-            forecast_data: DataFrame with forecast data
+            forecast_data: DataFrame with SKU forecast data
 
         Returns:
             Tuple of (optimized DataFrame, method used)
@@ -194,15 +197,42 @@ class HybridStockOptimizer:
                 )
 
     def get_optimization_summary(self, optimized_df: pd.DataFrame) -> Dict:
-        """Generate summary statistics from optimization results"""
-        return {
-            'total_products': len(optimized_df),
-            'total_optimal_stock_units': float(optimized_df['OPTIMAL_ORDER_QTY'].sum()),
-            'total_safety_stock_units': float(optimized_df['SAFETY_STOCK'].sum()),
-            'total_max_stock_units': float(optimized_df['MAX_STOCK_LEVEL'].sum()),
-            'total_annual_cost': float(optimized_df['TOTAL_ANNUAL_COST'].sum()),
-            'total_annual_revenue': float(optimized_df['EXPECTED_ANNUAL_REVENUE'].sum()),
-            'total_annual_profit': float(optimized_df['EXPECTED_ANNUAL_PROFIT'].sum()),
-            'avg_turnover_rate': float(optimized_df['TURNOVER_RATE'].mean()),
-            'service_level': float(optimized_df['SERVICE_LEVEL'].iloc[0]) if len(optimized_df) > 0 else 0.95,
+        """
+        Generate summary statistics from optimization results.
+        
+        Aligned with the new schema output columns.
+        """
+        summary = {
+            'total_skus': len(optimized_df),
+            'service_level': 0.95,  # Default
         }
+        
+        # Handle both old and new column names
+        if 'RECOMMENDED_FACINGS' in optimized_df.columns:
+            summary['total_facings'] = int(optimized_df['RECOMMENDED_FACINGS'].sum())
+        elif 'OPTIMAL_ORDER_QTY' in optimized_df.columns:  # Legacy
+            summary['total_facings'] = int(optimized_df['OPTIMAL_ORDER_QTY'].sum())
+        
+        if 'IS_RANGED' in optimized_df.columns:
+            summary['skus_ranged'] = int(optimized_df['IS_RANGED'].sum())
+        
+        if 'EXPECTED_WEEKLY_PROFIT' in optimized_df.columns:
+            summary['total_weekly_profit'] = float(optimized_df['EXPECTED_WEEKLY_PROFIT'].sum())
+        elif 'EXPECTED_ANNUAL_PROFIT' in optimized_df.columns:  # Legacy
+            summary['total_annual_profit'] = float(optimized_df['EXPECTED_ANNUAL_PROFIT'].sum())
+        
+        if 'SPACE_PRODUCTIVITY' in optimized_df.columns:
+            summary['avg_space_productivity'] = float(optimized_df['SPACE_PRODUCTIVITY'].mean())
+        elif 'TURNOVER_RATE' in optimized_df.columns:  # Legacy
+            summary['avg_turnover_rate'] = float(optimized_df['TURNOVER_RATE'].mean())
+        
+        if 'CHANGE_TYPE' in optimized_df.columns:
+            summary['skus_increased'] = len(optimized_df[optimized_df['CHANGE_TYPE'] == 'increased'])
+            summary['skus_decreased'] = len(optimized_df[optimized_df['CHANGE_TYPE'] == 'decreased'])
+            summary['skus_new'] = len(optimized_df[optimized_df['CHANGE_TYPE'] == 'new'])
+            summary['skus_removed'] = len(optimized_df[optimized_df['CHANGE_TYPE'] == 'removed'])
+        
+        if 'SERVICE_LEVEL' in optimized_df.columns and len(optimized_df) > 0:
+            summary['service_level'] = float(optimized_df['SERVICE_LEVEL'].iloc[0])
+        
+        return summary
