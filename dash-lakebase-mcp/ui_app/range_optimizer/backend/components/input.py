@@ -637,5 +637,6 @@ def render_input_grid() -> html.Div:
             submission_progress,
             # Navigation to results appears after submission
             results_nav_card,
-        ]
+        ],
+        style={"position": "relative"}
     )

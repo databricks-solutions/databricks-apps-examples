@@ -14,7 +14,6 @@ from fastapi.middleware.wsgi import WSGIMiddleware
 from .config import conf
 from .router import api
 from .logger import logger
-from .database import initialize_connection_pool, close_all_connections
 from contextlib import asynccontextmanager
 
 # Get the backend directory for Dash pages/assets
@@ -142,20 +141,15 @@ async def lifespan(app_instance: FastAPI):
     global _dash_app
     
     logger.info(f"Starting {conf.app_name}")
-    logger.info(f"Configuration:\n{conf.model_dump_json(indent=2)}")
     
-    # Initialize database connection pool
-    if not initialize_connection_pool():
-        logger.warning("Database connection pool not initialized - some features may not work")
-    
-    # Initialize database tables with sample data
-    try:
-        from .initialize_app import initialize_tables_on_startup
-        initialize_tables_on_startup()
-    except Exception as e:
-        logger.error(f"Failed to initialize tables: {e}")
-        import traceback
-        traceback.print_exc()
+    # Note: UI app does NOT connect directly to database
+    # All data operations go through MCP Server
+    # Architecture: ui_app --> MCP Server --> Database
+    mcp_url = conf.mcp_server_url
+    logger.info(f"Configuration:")
+    logger.info(f"  app_name: {conf.app_name}")
+    logger.info(f"  api_prefix: {conf.api_prefix}")
+    logger.info(f"  MCP_SERVER_URL: {mcp_url}")
     
     # Create Dash app
     try:
@@ -173,7 +167,6 @@ async def lifespan(app_instance: FastAPI):
     yield  # Application runs here
     
     # Shutdown
-    close_all_connections()
     logger.info("Application shutdown complete")
 
 

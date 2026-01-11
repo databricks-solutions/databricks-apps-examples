@@ -18,14 +18,13 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import pandas as pd
 import dash_mantine_components as dmc
-from dash import Input, Output, State, callback, callback_context, no_update
+from dash import Input, Output, State, callback, callback_context, no_update, html
 
 # Use MCP client for all data operations
-from ..mcp_client import get_skus, save_skus, submit_optimization_run
+from ..mcp_client import get_skus, save_skus, submit_optimization_run, validate_data
 
 from ..components.input import (
     CSV_TO_GRID_COL_MAP,
-    get_null_description,
     COLUMN_DEFS,
 )
 
@@ -52,6 +51,104 @@ LAST_COLUMN_OPTIONS = {
     "STATUS": None,
     "CATEGORY": None,
 }
+
+def build_validation_summary(data: Optional[List[Dict[str, Any]]]):
+    """
+    Run validation via MCP API and return both the rendered alert stack and a flag
+    indicating if submission should be blocked (no data or any errors).
+    """
+    # Check for empty data first
+    if not data:
+        no_data_alert = dmc.Alert(
+            title="No Data",
+            color="red",
+            radius="md",
+            children=["Please add SKU records before submitting."],
+            style={"marginBottom": "8px"},
+        )
+        alert_stack = dmc.Stack([no_data_alert], gap="sm")
+        return alert_stack, True
+    
+    # Call MCP validation API
+    response = validate_data(data)
+    
+    if not response.success:
+        # MCP server error - show error but allow local validation fallback
+        error_alert = dmc.Alert(
+            title="Validation Service Unavailable",
+            color="yellow",
+            radius="md",
+            children=[f"Could not connect to validation service: {response.error}"],
+            style={"marginBottom": "8px"},
+        )
+        alert_stack = dmc.Stack([error_alert], gap="sm")
+        return alert_stack, False  # Don't block submission on MCP error
+    
+    # Parse validation results from MCP
+    validation_result = response.data
+    issues = validation_result.get("issues", [])
+    
+    # Build alerts from issues
+    alerts = []
+    
+    # Group issues by severity
+    errors = [issue for issue in issues if issue.get("severity") == "error"]
+    warnings = [issue for issue in issues if issue.get("severity") == "warning"]
+    
+    # Add error alerts (red)
+    if errors:
+        error_messages = []
+        for error in errors[:5]:  # Show first 5 errors
+            msg = error.get("message", "Unknown error")
+            if error.get("sell_id"):
+                msg = f"SKU {error['sell_id']}: {msg}"
+            error_messages.append(msg)
+        
+        if len(errors) > 5:
+            error_messages.append(f"... and {len(errors) - 5} more errors")
+        
+        alerts.append(dmc.Alert(
+            title=f"❌ {len(errors)} Error(s) Found",
+            color="red",
+            radius="md",
+            children=[html.Div([html.Div(msg) for msg in error_messages])],
+            style={"marginBottom": "8px"},
+        ))
+    
+    # Add warning alerts (yellow)
+    if warnings:
+        warning_messages = []
+        for warning in warnings[:3]:  # Show first 3 warnings
+            msg = warning.get("message", "Unknown warning")
+            if warning.get("sell_id"):
+                msg = f"SKU {warning['sell_id']}: {msg}"
+            warning_messages.append(msg)
+        
+        if len(warnings) > 3:
+            warning_messages.append(f"... and {len(warnings) - 3} more warnings")
+        
+        alerts.append(dmc.Alert(
+            title=f"⚠️ {len(warnings)} Warning(s)",
+            color="yellow",
+            radius="md",
+            children=[html.Div([html.Div(msg) for msg in warning_messages])],
+            style={"marginBottom": "8px"},
+        ))
+    
+    # Add success alert if no issues
+    if not errors and not warnings:
+        alerts.append(dmc.Alert(
+            title="✓ Validation Passed",
+            color="green",
+            radius="md",
+            children=[validation_result.get("summary", f"{len(data)} SKU records are ready for submission.")],
+            style={"marginBottom": "8px"},
+        ))
+    
+    alert_stack = dmc.Stack(alerts, gap="sm") if alerts else dmc.Stack([], gap="sm")
+    disable_submit = validation_result.get("has_errors", False)
+    
+    return alert_stack, disable_submit
 
 
 def log(message: str) -> None:
@@ -123,11 +220,11 @@ def export_data_as_csv(n_clicks: Optional[int]) -> bool:
     Input("grid-data-store", "data"),
     prevent_initial_call=True,
 )
-def validate_grid(store_data: List[Dict[str, Any]]) -> Tuple[bool, List[dmc.Alert]]:
+def validate_grid(store_data: List[Dict[str, Any]]) -> Tuple[bool, dmc.Stack]:
     """Validate grid data and toggle submit button."""
-    alerts = get_null_description(store_data).children
-    has_critical_errors = any(alert.color not in ["green"] for alert in alerts)
-    return has_critical_errors, alerts
+    alert_stack, disable_submit = build_validation_summary(store_data)
+    log(f"VALIDATION: disable_submit={disable_submit}")
+    return disable_submit, alert_stack
 
 
 # =============================================================================
@@ -173,8 +270,7 @@ def submit_range_optimization(
     log(f"Store data: {len(data_for_validation)} records")
 
     # Validate
-    alerts = get_null_description(data_for_validation).children
-    has_critical_errors = any(alert.color not in ["green"] for alert in alerts)
+    _, has_critical_errors = build_validation_summary(data_for_validation)
     
     hidden_style = {"display": "none"}
     visible_style = {"display": "block", "marginTop": "20px"}

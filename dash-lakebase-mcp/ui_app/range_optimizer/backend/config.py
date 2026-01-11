@@ -187,10 +187,6 @@ class AppConfig(BaseSettings):
     
     app_name: str = Field(default=app_name)
     api_prefix: str = Field(default=api_prefix)
-    
-    # MCP Server URL for optimization - reads from MCP_SERVER_URL env var
-    # Note: Field name must match env var (case-insensitive with case_sensitive=False)
-    MCP_SERVER_URL: str = Field(default="http://localhost:9000")
 
     @property
     def static_assets_path(self) -> Path:
@@ -198,8 +194,13 @@ class AppConfig(BaseSettings):
     
     @property
     def mcp_server_url(self) -> str:
-        """Alias for MCP_SERVER_URL for backward compatibility"""
-        return self.MCP_SERVER_URL
+        """Get MCP Server URL from environment (Databricks injects this)"""
+        return os.environ.get("MCP_SERVER_URL", "http://localhost:9000")
+    
+    # Keep uppercase alias for backward compatibility
+    @property
+    def MCP_SERVER_URL(self) -> str:
+        return self.mcp_server_url
 
 
 # Singleton instances

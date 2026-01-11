@@ -12,6 +12,10 @@ Benefits:
     - Centralized error handling
     - Easy to mock for testing
     - Clear separation of concerns
+
+Authentication:
+    Uses WorkspaceClient for automatic OAuth token management.
+    Databricks Apps service principals authenticate automatically via system auth.
 """
 
 import os
@@ -26,12 +30,14 @@ from requests.exceptions import RequestException, Timeout, ConnectionError
 # Configuration
 # =============================================================================
 
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:9000")
 REQUEST_TIMEOUT = 30  # seconds
+
+# Cache WorkspaceClient for reuse (singleton pattern)
+_workspace_client = None
 
 
 def _get_mcp_url() -> str:
-    """Get MCP server URL, refreshing from environment"""
+    """Get MCP server URL from environment"""
     return os.environ.get("MCP_SERVER_URL", "http://localhost:9000")
 
 
@@ -41,28 +47,53 @@ def _log(message: str) -> None:
     print(f"[{timestamp}] [MCP Client] {message}")
 
 
-def _get_auth_headers() -> Optional[Dict[str, str]]:
+def _get_workspace_client():
+    """
+    Get or create cached WorkspaceClient.
+    
+    In Databricks Apps, WorkspaceClient() automatically uses the app's
+    service principal identity (system auth) - no credentials needed.
+    """
+    global _workspace_client
+    if _workspace_client is None:
+        from databricks.sdk import WorkspaceClient
+        _workspace_client = WorkspaceClient()
+        _log("✓ Initialized WorkspaceClient (system auth)")
+    return _workspace_client
+
+
+def _get_auth_headers() -> Dict[str, str]:
     """
     Get authentication headers for app-to-app communication.
     
-    When running on Databricks Apps, uses WorkspaceClient for OAuth.
-    For local development (localhost), returns None.
+    Uses WorkspaceClient.config.authenticate() which is the recommended
+    pattern for Databricks app-to-app calls. The SDK handles OAuth
+    token acquisition and refresh automatically.
     """
     mcp_url = _get_mcp_url()
     
-    # Skip auth for localhost
+    # Skip auth for localhost development
     if "localhost" in mcp_url or "127.0.0.1" in mcp_url:
-        return None
+        _log("→ Localhost detected, skipping auth")
+        return {}
     
     try:
-        from databricks.sdk import WorkspaceClient
-        w = WorkspaceClient()
-        headers = w.config.authenticate()
-        _log("✓ Got OAuth headers for app-to-app auth")
-        return headers
+        ws = _get_workspace_client()
+        
+        # Use config.authenticate() - the recommended SDK pattern
+        # This returns a dict with Authorization header
+        auth_headers = ws.config.authenticate()
+        
+        if auth_headers and isinstance(auth_headers, dict):
+            _log("✓ Got auth headers via WorkspaceClient.config.authenticate()")
+            return auth_headers
+        
+        _log("⚠️ WorkspaceClient.config.authenticate() returned empty headers")
+        return {}
+        
     except Exception as e:
-        _log(f"⚠️ Could not get auth headers: {e}")
-        return None
+        _log(f"❌ Auth error: {e}")
+        return {}
 
 
 # =============================================================================
@@ -76,6 +107,70 @@ class APIResponse:
     data: Any
     error: Optional[str] = None
     source: str = "mcp-server"
+
+
+# =============================================================================
+# Validation Operations
+# =============================================================================
+
+def validate_data(data: List[Dict[str, Any]]) -> APIResponse:
+    """
+    Validate grid data via MCP server.
+    
+    Args:
+        data: List of SKU records to validate
+        
+    Returns:
+        APIResponse with validation results
+    """
+    mcp_url = _get_mcp_url()
+    _log(f"📡 POST /api/validate - {len(data)} records")
+    
+    try:
+        headers = _get_auth_headers() or {}
+        headers["Content-Type"] = "application/json"
+        
+        response = requests.post(
+            f"{mcp_url}/api/validate",
+            json={"data": data},
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        
+        result = response.json()
+        _log(f"✓ Validation result: valid={result.get('valid')}, errors={result.get('has_errors')}, warnings={result.get('has_warnings')}")
+        
+        return APIResponse(
+            success=True,
+            data=result,
+            source="mcp-server"
+        )
+        
+    except Timeout:
+        _log(f"⏱️ Validation request timed out after {REQUEST_TIMEOUT}s")
+        return APIResponse(
+            success=False,
+            data=None,
+            error=f"Validation request timed out after {REQUEST_TIMEOUT}s",
+            source="timeout"
+        )
+    except ConnectionError as e:
+        _log(f"🔌 Connection error: {e}")
+        return APIResponse(
+            success=False,
+            data=None,
+            error=f"Could not connect to MCP server at {mcp_url}",
+            source="connection-error"
+        )
+    except RequestException as e:
+        _log(f"❌ Validation failed: {e}")
+        return APIResponse(
+            success=False,
+            data=None,
+            error=str(e),
+            source="error"
+        )
 
 
 # =============================================================================
