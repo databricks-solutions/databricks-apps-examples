@@ -1,0 +1,27 @@
+/* Styles for AG Grid validated editable columns */
+
+/* Header style for columns with validation */
+.validated-header {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.validated-header .ag-header-cell-label {
+    font-weight: 600;
+}
+
+/* Add a subtle indicator icon after validated column headers */
+.validated-header .ag-header-cell-label::after {
+    content: " ✎";
+    font-size: 0.75em;
+    opacity: 0.7;
+}
+
+/* Hover effect for validated editable cells */
+.ag-theme-quartz .ag-cell[style*="border-left: 3px solid"]:hover {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Focus/editing state for validated cells */
+.ag-theme-quartz .ag-cell-focus[style*="border-left: 3px solid"] {
+    background-color: rgba(59, 130, 246, 0.2) !important;
+}
