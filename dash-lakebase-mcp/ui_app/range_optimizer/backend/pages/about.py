@@ -44,33 +44,40 @@ layout = dbc.Container(
                                 dmc.Title("Overview", order=2, mb=12),
                                 dmc.Text(
                                     [
-                                        "Lakebase Inventory Intelligence is a purpose-built forecasting and stock optimization platform designed for modern retail operations. ",
-                                        "This system combines intuitive data management with ML-powered Economic Order Quantity (EOQ) optimization to help stores and distribution centers ",
-                                        "maximize profitability while minimizing holding costs. Submit category-based forecast runs and automatically generate optimal stock levels, ",
-                                        "reorder points, and safety stock recommendations for every product across Beverages, Dairy, Bakery, Snacks, and Frozen categories.",
+                                        "Lakebase Inventory Intelligence is an AI-powered forecasting and stock optimization platform that combines the best of Databricks. ",
+                                        "This system leverages a Custom MCP (Model Context Protocol) Server, Agentic AI powered by Claude Sonnet 4.5, MLflow Model Serving, ",
+                                        "and Unity Catalog to deliver real-time inventory optimization. Select product ranges and receive optimized stock levels, ",
+                                        "reorder points, and safety stock recommendations within seconds—powered by ML models trained on your historical data.",
                                     ],
                                     size="lg",
                                     mb=16,
                                 ),
                                 dmc.Blockquote(
                                     [
-                                        "Built on Databricks infrastructure with enterprise-grade security and performance. ",
+                                        "Built on Databricks Data Intelligence Platform with enterprise-grade security and AI capabilities. ",
                                         "This platform leverages ",
                                         dmc.Anchor("Dash from Plotly", href="https://dash.plotly.com/", target="_blank"),
                                         ", ",
-                                        dmc.Anchor("Dash Mantine Components", href="https://www.dash-mantine-components.com/", target="_blank"),
-                                        ", ",
-                                        dmc.Anchor("Dash AG-Grid", href="https://www.ag-grid.com/", target="_blank"),
-                                        ", and ",
                                         dmc.Anchor("Databricks Lakebase", href="https://docs.databricks.com/en/sql/lakebase.html", target="_blank"),
-                                        " for secure, scalable inventory management.",
+                                        ", ",
+                                        dmc.Anchor("Unity Catalog", href="https://docs.databricks.com/en/data-governance/unity-catalog/index.html", target="_blank"),
+                                        ", ",
+                                        dmc.Anchor("MLflow Model Serving", href="https://docs.databricks.com/en/machine-learning/model-serving/index.html", target="_blank"),
+                                        ", and ",
+                                        dmc.Anchor("AI Gateway", href="https://docs.databricks.com/en/generative-ai/ai-gateway.html", target="_blank"),
+                                        " with Claude Sonnet 4.5 for intelligent, agentic analysis.",
                                     ],
                                     icon=DashIconify(icon="material-symbols:info-outline", height=24 ),
                                     color="red",
                                 ),
                                 dmc.Title("System Architecture", order=2, mt=24, mb=12, c="#1A73E8"),
                                 dmc.Text(
-                                    "End-to-end data flow showing how forecast submissions trigger ML optimization and deliver actionable stock recommendations:",
+                                    [
+                                        "The system uses a multi-layered architecture built on Databricks Data Intelligence Platform. ",
+                                        "Range selections trigger ML inference via Model Serving (using Feature Store), while a Custom MCP Server ",
+                                        "orchestrates agentic analysis powered by AI Gateway with Claude Sonnet 4.5. All data flows through Lakebase (PostgreSQL) ",
+                                        "with results persisted to Unity Catalog Delta tables:",
+                                    ],
                                     size="md",
                                     c="dimmed",
                                     mb=16,
@@ -101,45 +108,54 @@ layout = dbc.Container(
                                     [
                                         dbc.ListGroupItem(
                                             [
-                                                dmc.Title("Interactive Forecast Management", order=5),
+                                                dmc.Title("Custom MCP Server Architecture", order=5),
                                                 dmc.Text(
-                                                    "Submit forecast runs by category with an Excel-like interface. Real-time validation ensures data quality before submission.",
+                                                    "Model Context Protocol (MCP) server handles all backend communication, providing secure API access to Lakebase and orchestrating ML workflows.",
                                                     size="md",
                                                 ),
                                             ]
                                         ),
                                         dbc.ListGroupItem(
                                             [
-                                                dmc.Title("ML-Powered Stock Optimization", order=5),
+                                                dmc.Title("Agentic AI Analysis", order=5),
                                                 dmc.Text(
-                                                    "Automatic EOQ-based optimization calculates optimal order quantities, safety stock, reorder points, and profit projections for every product.",
+                                                    "Agent Orchestration Framework powered by AI Gateway with Claude Sonnet 4.5 provides intelligent analysis and recommendations based on your inventory data.",
                                                     size="md",
                                                 ),
                                             ]
                                         ),
                                         dbc.ListGroupItem(
                                             [
-                                                dmc.Title("Databricks Lakebase Integration", order=5),
+                                                dmc.Title("MLflow Model Serving with Feature Store", order=5),
                                                 dmc.Text(
-                                                    "Seamless PostgreSQL connection with OAuth authentication, storing forecast submissions and optimization results in Databricks.",
+                                                    "Real-time ML inference using Databricks Model Serving endpoints with Feature Store integration for consistent, production-grade predictions.",
                                                     size="md",
                                                 ),
                                             ]
                                         ),
                                         dbc.ListGroupItem(
                                             [
-                                                dmc.Title("Comprehensive Visualization", order=5),
+                                                dmc.Title("Unity Catalog Data Governance", order=5),
                                                 dmc.Text(
-                                                    "Interactive charts and summary cards show stock levels, turnover rates, cost vs revenue analysis, and profitability metrics.",
+                                                    "All forecast results, selected ranges, optimizer results, and MLflow models are registered in Unity Catalog with full lineage and governance.",
                                                     size="md",
                                                 ),
                                             ]
                                         ),
                                         dbc.ListGroupItem(
                                             [
-                                                dmc.Title("Hybrid ML Architecture", order=5),
+                                                dmc.Title("Databricks Lakebase (PostgreSQL)", order=5),
                                                 dmc.Text(
-                                                    "Optimization runs via MLflow Model Serving endpoints in Databricks with intelligent fallback for development environments.",
+                                                    "Seamless PostgreSQL connection with OAuth authentication storing all operational data and serving as the Feature Store for ML inference.",
+                                                    size="md",
+                                                ),
+                                            ]
+                                        ),
+                                        dbc.ListGroupItem(
+                                            [
+                                                dmc.Title("Real-Time Optimization", order=5),
+                                                dmc.Text(
+                                                    "Select product ranges and receive optimized recommendations within seconds—full end-to-end pipeline from selection to AI-powered insights.",
                                                     size="md",
                                                 ),
                                             ]
@@ -150,27 +166,55 @@ layout = dbc.Container(
                                 dmc.Title("How It Works", order=2, mt=24, mb=12),
                                 dmc.Text(
                                     [
-                                        "1. Navigate to the Input page and select a product category (Beverages, Dairy, Bakery, Snacks, or Frozen). ",
-                                        "2. View and edit product data in the Excel-like grid interface. Built-in validation checks for required fields and duplicates. ",
-                                        "3. Submit your forecast run - the system automatically triggers stock optimization using the EOQ model. ",
-                                        "4. View results in the Stock Optimization page - select your forecast run to see detailed inventory recommendations, ",
-                                        "profitability analysis, and interactive visualizations. ",
-                                        "5. Export results to CSV for further analysis or integration with other systems.",
+                                        "① ", dmc.Text("Range Selected: ", fw=700, span=True), "User selects product ranges through the Dash UI interface. ",
+                                        html.Br(), html.Br(),
+                                        "② ", dmc.Text("Save Range to Lakebase via MCP Backend: ", fw=700, span=True), "Selection is persisted to Databricks Lakebase (PostgreSQL) through the Custom MCP Server. ",
+                                        html.Br(), html.Br(),
+                                        "③ ", dmc.Text("Model Serving Endpoint Does Inference: ", fw=700, span=True), "MLflow Model Serving endpoint performs real-time inference using Feature Store data from Lakebase. ",
+                                        html.Br(), html.Br(),
+                                        "④ ", dmc.Text("Trigger Agentic Analysis via MCP: ", fw=700, span=True), "Agent Orchestration Framework analyzes results using AI Gateway powered by Claude Sonnet 4.5. ",
+                                        html.Br(), html.Br(),
+                                        "⑤ ", dmc.Text("User Gets Optimized Ranges Within Seconds: ", fw=700, span=True), "AI-powered optimization results are displayed with detailed inventory recommendations, ",
+                                        "profitability analysis, and interactive visualizations. All results are stored in Unity Catalog Delta tables for governance and lineage.",
                                     ],
                                     size="md",
                                 ),
                                 html.Div(
                                     [
                                         dmc.Title("Technology Stack", order=2, mt=24, mb=12),
-                                        dmc.Text(
+                                        dmc.List(
                                             [
-                                                "Built with Dash Plotly, Dash Mantine Components, and Dash AG-Grid for a modern, responsive interface. ",
-                                                "Backend powered by Databricks Lakebase PostgreSQL with connection pooling and OAuth authentication. ",
-                                                "ML models deployed via MLflow Model Serving for production-grade inference. ",
-                                                "The EOQ optimization algorithm considers demand variability, ordering costs, holding costs, and service level requirements ",
-                                                "to provide comprehensive inventory recommendations.",
+                                                dmc.ListItem([
+                                                    dmc.Text("Frontend: ", fw=700, span=True),
+                                                    "Dash Plotly, Dash Mantine Components, and Dash AG-Grid for a modern, responsive UI",
+                                                ]),
+                                                dmc.ListItem([
+                                                    dmc.Text("Backend Integration: ", fw=700, span=True),
+                                                    "Custom MCP (Model Context Protocol) Server for API orchestration and secure data access",
+                                                ]),
+                                                dmc.ListItem([
+                                                    dmc.Text("Data Storage: ", fw=700, span=True),
+                                                    "Databricks Lakebase (PostgreSQL) with OAuth authentication and connection pooling",
+                                                ]),
+                                                dmc.ListItem([
+                                                    dmc.Text("ML Inference: ", fw=700, span=True),
+                                                    "MLflow Model Serving endpoints with Feature Store integration for real-time predictions",
+                                                ]),
+                                                dmc.ListItem([
+                                                    dmc.Text("AI & Agents: ", fw=700, span=True),
+                                                    "Agent Orchestration Framework with AI Gateway powered by Claude Sonnet 4.5",
+                                                ]),
+                                                dmc.ListItem([
+                                                    dmc.Text("Data Governance: ", fw=700, span=True),
+                                                    "Unity Catalog for data lineage, model registry, and Delta table management",
+                                                ]),
+                                                dmc.ListItem([
+                                                    dmc.Text("Platform: ", fw=700, span=True),
+                                                    "Databricks Data Intelligence Platform providing enterprise-grade security, scalability, and integration",
+                                                ]),
                                             ],
                                             size="md",
+                                            spacing="xs",
                                         ),
                                     ],
                                     className="mt-4",

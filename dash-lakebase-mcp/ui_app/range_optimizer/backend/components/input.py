@@ -433,7 +433,7 @@ def render_input_grid() -> html.Div:
         rowClassRules={"ag-row-hover": "true"},
         style={
             "--ag-row-hover-color": "#f5f5f5",
-            "height": "70vh",  # give the grid room so headers and rows are visible
+            "height": "45vh",  # reduced height so buttons stay visible on screen
         },
     )
 
@@ -622,15 +622,7 @@ def render_input_grid() -> html.Div:
             dmc.Space(h=10),
             dmc.Group([segment_dropdown, store_selector], gap="xl"),
             dmc.Space(h=15),
-            constraints_card,
-            dmc.Space(h=10),
-            data_overlay,
-            description_box_wrapper,  # Wrapper controls visibility during submission
-            # Submission progress and results nav - placed above grid for visibility
-            submission_progress,
-            results_nav_card,
-            grid,
-            dmc.Space(h=10),
+            # Action buttons - placed above grid so they're always visible
             dmc.Group(
                 [
                     reset_button,
@@ -639,8 +631,27 @@ def render_input_grid() -> html.Div:
                     upload_button,
                     submit_button,
                     overwrite_switch,
-                ]
+                ],
+                gap="sm",
             ),
+            dmc.Space(h=10),
+            # Info/validation alerts - fixed position panel above grid
+            html.Div(
+                [
+                    description_box_wrapper,  # Wrapper controls visibility during submission
+                    submission_progress,
+                    results_nav_card,
+                ],
+                style={
+                    "maxHeight": "180px",
+                    "overflowY": "auto",
+                    "marginBottom": "10px",
+                },
+            ),
+            data_overlay,
+            grid,
+            dmc.Space(h=10),
+            constraints_card,
         ],
         style={"position": "relative"}
     )

@@ -39,6 +39,47 @@ MCP_SERVER_URL=http://localhost:9001 \
 - [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md) - Complete local development guide
 - [RUN_MULTIPLE_APPS.md](./RUN_MULTIPLE_APPS.md) - Running multiple apps simultaneously
 
+## 📋 Logging & Monitoring
+
+Monitor your apps in both local and Databricks environments:
+
+### Local Development Logs
+
+```bash
+# Stream MCP app logs
+tail -f mcp-app.log
+
+# Stream UI app logs
+tail -f ui-app.log
+
+# Monitor both simultaneously
+tail -f mcp-app.log ui-app.log
+
+# Filter for errors
+tail -f mcp-app.log | grep -E "ERROR|WARNING"
+```
+
+### Databricks Deployment Logs
+
+```bash
+# Stream MCP app logs from Databricks
+databricks apps logs range-opt-mcp-daveok --follow
+
+# Stream UI app logs from Databricks
+databricks apps logs range-opt-ui-daveok --follow
+
+# View last 100 lines
+databricks apps logs range-opt-mcp-daveok --tail 100
+```
+
+### No Conflicts Between Environments
+
+- **Local logs**: Written to `./mcp-app.log` and `./ui-app.log` (local filesystem)
+- **Databricks logs**: Stored in cloud, accessed via CLI (no local files)
+- Both can run simultaneously without interference
+
+**For comprehensive logging guide**, see [LOGGING_GUIDE.md](./LOGGING_GUIDE.md)
+
 ## Architecture
 
 This application consists of two separate components for security isolation:
@@ -138,6 +179,20 @@ databricks bundle deploy --resource apps.range_optimizer_mcp
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
+### Monitoring Deployed Apps
+
+```bash
+# Check app status
+databricks apps get range-opt-mcp-daveok
+databricks apps get range-opt-ui-daveok
+
+# Stream logs in real-time
+databricks apps logs range-opt-mcp-daveok --follow
+databricks apps logs range-opt-ui-daveok --follow
+```
+
+See [LOGGING_GUIDE.md](LOGGING_GUIDE.md) for complete monitoring guide.
+
 ### Unity Catalog Setup
 
 The Lakebase database is registered with Unity Catalog for governed data access:
@@ -200,7 +255,10 @@ dash-lakebase-mcp/
 │   └── app.yaml               # UI permissions (restricted)
 ├── mcp_app/                    # MCP app deployment
 │   └── app.yaml               # MCP permissions (elevated)
+├── mcp-app.log                 # Local MCP app logs (gitignored)
+├── ui-app.log                  # Local UI app logs (gitignored)
 ├── DATABRICKS_ML_IMPLEMENTATION.md      # ML best practices guide
+├── LOGGING_GUIDE.md            # Comprehensive logging documentation
 └── scripts/                    # Utility scripts
 ```
 
