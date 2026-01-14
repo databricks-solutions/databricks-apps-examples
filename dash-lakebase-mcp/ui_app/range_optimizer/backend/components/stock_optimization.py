@@ -140,9 +140,10 @@ def create_summary_cards(summary_data: Dict[str, Any]) -> html.Div:
 
 
 def create_optimization_charts(optimization_df) -> html.Div:
-    """Create visualization charts for range optimization results.
+    """Create beautiful visualization charts for range optimization results.
     
     Handles various column name formats from the API (uppercase after conversion).
+    Features enhanced styling with dark theme, modern colors, and rich interactivity.
     """
     if optimization_df is None or len(optimization_df) == 0:
         return html.Div()
@@ -179,22 +180,60 @@ def create_optimization_charts(optimization_df) -> html.Div:
     profit_col = get_col('EXPECTED_MARGIN_WEEKLY', 'SPACE_PRODUCTIVITY', 'WEEKLY_PROFIT')
     segment_col = get_col('SEGMENT', 'CATEGORY', 'BRAND')
     
-    # Create subplots
+    # ═══════════════════════════════════════════════════════════════
+    # COLES GROUP THEME - Red accent, light background, high contrast
+    # ═══════════════════════════════════════════════════════════════
+    COLES_RED = '#E01A22'           # Coles primary red
+    COLES_DARK_RED = '#B8151B'      # Darker red for contrast
+    
+    # Color palette with Coles red as hero, complementary colors
+    PIE_COLORS_PRIMARY = [
+        '#E01A22',  # Coles Red (hero)
+        '#2D9CDB',  # Corporate Blue
+        '#27AE60',  # Fresh Green
+        '#F2994A',  # Warm Orange
+        '#9B51E0',  # Purple accent
+        '#56CCF2',  # Light Blue
+        '#EB5757',  # Soft Red
+        '#F2C94C',  # Yellow
+    ]
+    PIE_COLORS_SECONDARY = [
+        '#2D9CDB',  # Corporate Blue
+        '#27AE60',  # Fresh Green  
+        '#E01A22',  # Coles Red
+        '#F2994A',  # Warm Orange
+        '#9B51E0',  # Purple accent
+        '#56CCF2',  # Light Blue
+    ]
+    
+    # Light theme colors for white page background
+    PLOT_BG = '#FFFFFF'                      # White background
+    PAPER_BG = '#FFFFFF'                     # White paper
+    GRID_COLOR = 'rgba(0, 0, 0, 0.08)'       # Subtle gray grid
+    TEXT_COLOR = '#1F2937'                   # Dark slate for text
+    SUBTITLE_COLOR = '#374151'               # Slightly lighter for subtitles
+    AXIS_COLOR = '#4B5563'                   # Gray for axis labels
+
+    # Create subplots with better spacing
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=(
-            f'Facings by {brand_col or "Category"}',
-            'Current vs Recommended Facings',
-            'Profit Potential by SKU',
-            f'Distribution by {segment_col or "Segment"}'
+            f'🏷️ Facings by {brand_col or "Category"}',
+            '📊 Current vs Recommended',
+            '💰 Profit Potential by SKU',
+            f'🎯 {segment_col or "Segment"} Distribution'
         ),
         specs=[
             [{"type": "pie"}, {"type": "bar"}],
             [{"type": "bar"}, {"type": "pie"}]
-        ]
+        ],
+        horizontal_spacing=0.12,
+        vertical_spacing=0.25,  # More space between top and bottom rows
     )
 
-    # Chart 1: Facings by Brand/Category (Pie)
+    # ═══════════════════════════════════════════════════════════════
+    # CHART 1: Facings by Brand (Enhanced Donut) - Coles Theme
+    # ═══════════════════════════════════════════════════════════════
     if brand_col and facings_col:
         brand_facings = ranged_df.groupby(brand_col)[facings_col].sum().reset_index()
         fig.add_trace(
@@ -202,15 +241,27 @@ def create_optimization_charts(optimization_df) -> html.Div:
                 labels=brand_facings[brand_col],
                 values=brand_facings[facings_col],
                 name='Brand Share',
-                hole=0.4,
-                marker_colors=['#E21837', '#00824B', '#0066CC', '#FF9900', '#6B7280', '#8B5CF6'],
+                hole=0.5,
+                marker=dict(
+                    colors=PIE_COLORS_PRIMARY[:len(brand_facings)],
+                    line=dict(color='#FFFFFF', width=2)
+                ),
+                textinfo='percent+label',
+                textposition='outside',
+                textfont=dict(size=11, color=TEXT_COLOR, family="system-ui, -apple-system, sans-serif"),
+                hovertemplate="<b>%{label}</b><br>" +
+                              "Facings: %{value:,.0f}<br>" +
+                              "Share: %{percent}<extra></extra>",
+                pull=[0.015] * len(brand_facings),
             ),
             row=1, col=1
         )
 
-    # Chart 2: Current vs Recommended Facings (Bar)
+    # ═══════════════════════════════════════════════════════════════
+    # CHART 2: Current vs Recommended (Grouped Bar) - Coles Theme
+    # ═══════════════════════════════════════════════════════════════
     if sku_col and facings_col:
-        x_labels = ranged_df[sku_col].astype(str).str[:20]
+        x_labels = ranged_df[sku_col].astype(str).str[:15]
         
         if current_col:
             fig.add_trace(
@@ -218,7 +269,11 @@ def create_optimization_charts(optimization_df) -> html.Div:
                     x=x_labels,
                     y=ranged_df[current_col],
                     name='Current',
-                    marker_color='#6B7280',
+                    marker=dict(
+                        color='#9CA3AF',  # Gray for current
+                        line=dict(width=0),
+                    ),
+                    hovertemplate="<b>%{x}</b><br>Current: %{y} facings<extra></extra>",
                 ),
                 row=1, col=2
             )
@@ -228,28 +283,50 @@ def create_optimization_charts(optimization_df) -> html.Div:
                 x=x_labels,
                 y=ranged_df[facings_col],
                 name='Recommended',
-                marker_color='#E21837',
+                marker=dict(
+                    color=COLES_RED,  # Coles red for recommended
+                    line=dict(width=0),
+                ),
+                hovertemplate="<b>%{x}</b><br>Recommended: %{y} facings<extra></extra>",
             ),
             row=1, col=2
         )
 
-    # Chart 3: Profit Potential (Bar)
+    # ═══════════════════════════════════════════════════════════════
+    # CHART 3: Profit Potential (Horizontal Bar) - Coles Theme
+    # ═══════════════════════════════════════════════════════════════
     if sku_col and profit_col:
-        productivity_df = ranged_df.sort_values(profit_col, ascending=True).head(15)
+        productivity_df = ranged_df.sort_values(profit_col, ascending=True).head(12)
         median_val = productivity_df[profit_col].median() if len(productivity_df) > 0 else 0
-        colors = ['#E21837' if x >= median_val else '#6B7280' for x in productivity_df[profit_col]]
+        
+        # Coles-themed conditional colors
+        colors = []
+        for x in productivity_df[profit_col]:
+            if x >= median_val * 1.2:
+                colors.append('#E01A22')  # Coles red - top performers
+            elif x >= median_val:
+                colors.append('#27AE60')  # Green - above average
+            else:
+                colors.append('#9CA3AF')  # Gray - below average
+        
         fig.add_trace(
             go.Bar(
                 x=productivity_df[profit_col],
-                y=productivity_df[sku_col].astype(str).str[:20],
+                y=productivity_df[sku_col].astype(str).str[:18],
                 orientation='h',
-                name='Profit/Facing',
-                marker_color=colors,
+                name='Weekly Profit',
+                marker=dict(
+                    color=colors,
+                    line=dict(width=0),
+                ),
+                hovertemplate="<b>%{y}</b><br>Weekly Profit: $%{x:,.2f}<extra></extra>",
             ),
             row=2, col=1
         )
 
-    # Chart 4: Segment Distribution (Pie)
+    # ═══════════════════════════════════════════════════════════════
+    # CHART 4: Segment Distribution (Enhanced Donut) - Coles Theme
+    # ═══════════════════════════════════════════════════════════════
     if segment_col and facings_col:
         segment_facings = ranged_df.groupby(segment_col)[facings_col].sum().reset_index()
         fig.add_trace(
@@ -257,27 +334,100 @@ def create_optimization_charts(optimization_df) -> html.Div:
                 labels=segment_facings[segment_col],
                 values=segment_facings[facings_col],
                 name='Segment Share',
-                hole=0.4,
-                marker_colors=['#0066CC', '#00824B', '#FF9900', '#E21837', '#8B5CF6'],
+                hole=0.5,
+                marker=dict(
+                    colors=PIE_COLORS_SECONDARY[:len(segment_facings)],
+                    line=dict(color='#FFFFFF', width=2)
+                ),
+                textinfo='percent+label',
+                textposition='outside',
+                textfont=dict(size=11, color=TEXT_COLOR, family="system-ui, -apple-system, sans-serif"),
+                hovertemplate="<b>%{label}</b><br>" +
+                              "Facings: %{value:,.0f}<br>" +
+                              "Share: %{percent}<extra></extra>",
             ),
             row=2, col=2
         )
 
-    # Update layout
-    fig.update_xaxes(tickangle=-45, row=1, col=2)
-    fig.update_xaxes(title_text="Weekly Profit ($)", row=2, col=1)
-    
-    fig.update_yaxes(title_text="Facings", row=1, col=2)
-
+    # ═══════════════════════════════════════════════════════════════
+    # GLOBAL LAYOUT - Coles Light Theme
+    # ═══════════════════════════════════════════════════════════════
     fig.update_layout(
-        height=700,
+        height=900,
         showlegend=True,
-        title_text="Range Optimization Analysis",
-        title_x=0.5,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.15,
+            xanchor="center",
+            x=0.5,
+            bgcolor='rgba(255,255,255,0.95)',
+            font=dict(color=TEXT_COLOR, size=10),
+            bordercolor='#E5E7EB',
+            borderwidth=1,
+            tracegroupgap=5,
+        ),
+        title=dict(
+            text="<b>Range Optimization Analysis</b>",
+            x=0.5,
+            y=0.98,
+            font=dict(size=22, color=COLES_RED, family="system-ui, -apple-system, sans-serif"),
+        ),
         barmode='group',
+        bargap=0.2,
+        bargroupgap=0.1,
+        paper_bgcolor=PAPER_BG,
+        plot_bgcolor=PLOT_BG,
+        font=dict(family="system-ui, -apple-system, sans-serif", color=TEXT_COLOR),
+        margin=dict(t=80, b=120, l=60, r=40),
+    )
+    
+    # Style subplot titles - dark text for light background, pushed up slightly
+    for annotation in fig.layout.annotations:
+        annotation.font = dict(size=14, color=TEXT_COLOR, family="system-ui, -apple-system, sans-serif")
+        annotation.y = annotation.y + 0.03  # Push titles up to avoid overlap with pie labels
+    
+    # Update axes styling for bar charts - Light theme
+    fig.update_xaxes(
+        tickangle=-45,
+        tickfont=dict(size=10, color=AXIS_COLOR),
+        gridcolor=GRID_COLOR,
+        showline=True,
+        linecolor='#E5E7EB',
+        row=1, col=2
+    )
+    fig.update_xaxes(
+        title_text="Weekly Profit ($)",
+        title_font=dict(size=11, color=TEXT_COLOR),
+        tickfont=dict(size=10, color=AXIS_COLOR),
+        gridcolor=GRID_COLOR,
+        tickprefix="$",
+        row=2, col=1
+    )
+    
+    fig.update_yaxes(
+        title_text="Facings",
+        title_font=dict(size=11, color=TEXT_COLOR),
+        tickfont=dict(size=10, color=AXIS_COLOR),
+        gridcolor=GRID_COLOR,
+        row=1, col=2
+    )
+    fig.update_yaxes(
+        tickfont=dict(size=10, color=AXIS_COLOR),
+        gridcolor=GRID_COLOR,
+        row=2, col=1
     )
 
-    return dcc.Graph(figure=fig, id='optimization-charts')
+    return dcc.Graph(
+        figure=fig,
+        id='optimization-charts',
+        config={
+            'displayModeBar': True,
+            'displaylogo': False,
+            'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+        },
+        style={'borderRadius': '12px', 'overflow': 'hidden'}
+    )
 
 
 def fetch_forecast_ids_with_optimization() -> List[str]:
@@ -295,11 +445,11 @@ def fetch_forecast_ids_with_optimization() -> List[str]:
 def render_stock_optimization_page() -> html.Div:
     """Render the range optimization results page layout"""
 
-    # Run selector
+    # Run selector - populated via callback to avoid startup race condition
     run_select = dmc.Select(
         id="optimization-forecast-select",
         label="Select Optimization Run",
-        data=[{"value": fid, "label": fid} for fid in fetch_forecast_ids_with_optimization()],
+        data=[],  # Populated by populate_run_dropdown callback
         searchable=True,
         clearable=True,
         persistence=True,

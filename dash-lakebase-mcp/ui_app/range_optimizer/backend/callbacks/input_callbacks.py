@@ -335,18 +335,24 @@ def submit_range_optimization(
 
     if n_clicks:
         log("→ Submitting optimization run via MCP...")
+        import time
+        
+        # Demo-friendly progress stages - each visible for a bit longer
         
         # Step 1: Prepare data
-        set_progress((20, "Step 1/4", "Preparing SKU data...", "Loading demand and margin data..."))
-        import time
-        time.sleep(0.3)
+        set_progress((10, "Step 1/5", "Preparing SKU data...", "Loading demand and margin data from Lakebase..."))
+        time.sleep(1.2)
         
         # Step 2: Building constraints
-        set_progress((40, "Step 2/4", "Building constraints...", "Setting up shelf space and brand constraints..."))
-        time.sleep(0.3)
+        set_progress((25, "Step 2/5", "Building constraints...", "Setting up shelf space, must-stock, and brand constraints..."))
+        time.sleep(1.2)
         
-        # Step 3: Submit to MCP server
-        set_progress((70, "Step 3/4", "Running optimization...", "Submitting to MCP server..."))
+        # Step 3: Running HiGHS optimizer
+        set_progress((45, "Step 3/5", "Running HiGHS optimizer...", "Solving mixed-integer linear program for optimal planogram..."))
+        time.sleep(1.5)
+        
+        # Step 4: Submit to MCP server
+        set_progress((65, "Step 4/5", "Saving results...", "Persisting optimization results to Databricks Lakebase..."))
         
         response = submit_optimization_run(data_for_validation)
         
@@ -357,9 +363,13 @@ def submit_range_optimization(
             
             log(f"✓ Optimization submitted: {run_id}, status: {status}")
             
-            # Step 4: Complete
-            set_progress((100, "Complete!", "Finished", "Range optimization complete!"))
-            time.sleep(0.3)
+            # Step 5: Triggering agentic analysis
+            set_progress((85, "Step 5/5", "Triggering agentic analysis...", "AI Agent analyzing planogram recommendations..."))
+            time.sleep(1.8)
+            
+            # Complete!
+            set_progress((100, "Complete! ✓", "Optimization finished", f"Run {run_id} ready for review"))
+            time.sleep(0.5)
             
             results_href = f"/stock-optimization?forecast={run_id}"
             return False, run_id, visible_style, f"Run ID: {run_id}", results_href

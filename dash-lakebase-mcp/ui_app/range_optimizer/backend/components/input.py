@@ -554,7 +554,7 @@ def render_input_grid() -> html.Div:
                         [
                             dmc.Badge(
                                 id="submission-step-badge",
-                                children="Step 1/4",
+                                children="Step 1/5",
                                 color="red",
                                 variant="light",
                             ),
