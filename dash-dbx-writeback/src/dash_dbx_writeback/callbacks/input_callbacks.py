@@ -198,6 +198,8 @@ def upload_data_to_uc(
 
         # Trigger Stock Optimization via MCP
         log("→ Triggering stock optimization via MCP...")
+        optimization_succeeded = False
+        opt_message = ""
         try:
             mcp_url = os.environ.get("MCP_SERVER_URL", "http://localhost:8000")
             response = requests.post(
@@ -206,28 +208,48 @@ def upload_data_to_uc(
                 timeout=30
             )
             response.raise_for_status()
-            result = response.json()
+            opt_result = response.json()
             
-            product_count = result.get("product_count", 0)
-            status = result.get("status", "unknown")
+            product_count = opt_result.get("product_count", 0)
+            status = opt_result.get("status", "unknown")
             log(f"✓ MCP Optimization Status: {status} ({product_count} products)")
             
-            opt_message = f"Optimized {product_count} products via MCP."
+            opt_message = f"Optimized {product_count} products."
+            optimization_succeeded = True
             
         except Exception as e:
             log(f"⚠️ MCP Optimization failed: {e}")
-            opt_message = "Optimization triggered but response not confirmed."
+            opt_message = f"Optimization failed: {str(e)[:100]}"
+            optimization_succeeded = False
 
-        success_alert = dmc.Alert(
-            title="Congrats - Forecast is submitted",
-            color="green",
-            radius="md",
-            children=[
-                f"Your forecast has been submitted. {opt_message} Forecast ID: {forecast_id}"
-            ],
-            style={"marginBottom": "8px"},
-        )
-        log("✓ Forecast submitted successfully")
+        # Return connection to pool before returning (Bug fix: connection leak)
+        return_connection(conn)
+
+        if optimization_succeeded:
+            success_alert = dmc.Alert(
+                title="Forecast Submitted & Optimized",
+                color="green",
+                radius="md",
+                children=[
+                    f"Your forecast has been submitted and optimized. {opt_message} Forecast ID: {forecast_id}"
+                ],
+                style={"marginBottom": "8px"},
+            )
+            log("✓ Forecast submitted and optimized successfully")
+        else:
+            # Partial success: data saved but optimization failed
+            warning_alert = dmc.Alert(
+                title="Forecast Submitted - Optimization Failed",
+                color="yellow",
+                radius="md",
+                children=[
+                    f"Your forecast data was saved (ID: {forecast_id}), but optimization could not be completed. {opt_message}"
+                ],
+                style={"marginBottom": "8px"},
+            )
+            log("⚠️ Forecast submitted but optimization failed")
+            return True, [warning_alert], False, forecast_id, visible_style, f"Forecast ID: {forecast_id}"
+        
         return True, [success_alert], False, forecast_id, visible_style, f"Forecast ID: {forecast_id}"
     
     return False, alerts, False, None, hidden_style, ""
