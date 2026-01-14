@@ -19,7 +19,9 @@ PGDATABASE="databricks_postgres"
 LAKEBASE_INSTANCE_NAME="daveok"
 
 # Point to LOCAL MCP app (change ports if needed)
-export MCP_SERVER_URL="${MCP_SERVER_URL:-http://localhost:9001}"
+# Note: Use port 7000 (app port) directly, not 7001 (proxy port) which may not work locally
+# Port range 7000-7003 avoids conflicts with SSH port forwarding (commonly uses 9000+)
+export MCP_SERVER_URL="${MCP_SERVER_URL:-http://localhost:7000}"
 echo "🔗 MCP_SERVER_URL: $MCP_SERVER_URL"
 
 echo ""

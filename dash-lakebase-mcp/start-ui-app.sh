@@ -1,7 +1,8 @@
 #!/bin/bash
 # Start only the UI App:
-#   - UI App:  ports 9002/9003
-# Assumes MCP App is running on 9001
+#   - UI App:  ports 7002/7003
+# Assumes MCP App is running on 7000/7001
+# Uses port range 7000-7003 to avoid conflicts with SSH port forwarding (commonly uses 9000+)
 #
 # Usage:
 #   ./start-ui-app.sh          # Normal mode
@@ -36,9 +37,10 @@ echo "🧹 Cleaning up old UI session..."
 screen -ls | grep "ui-app" | awk '{print $1}' | xargs -I {} screen -X -S {} quit 2>/dev/null || true
 
 echo ""
-echo "🎨 Starting UI app (ports 9002/9003)..."
-# We assume MCP server is at localhost:9001. If not running, UI might fail to connect but it will start.
-screen -dmS ui-app bash -c "cd '$PROJECT_DIR' && export MCP_SERVER_URL='http://localhost:9001' && ./run-databricks-app-local.sh ui_app 9002 9003 daveok $DEV_FLAG > ui-app.log 2>&1"
+echo "🎨 Starting UI app (ports 7002/7003)..."
+# Use port 7000 (app port) directly for reliability - proxy on 7001 may not work locally
+# We assume MCP server is at localhost:7000. If not running, UI might fail to connect but it will start.
+screen -dmS ui-app bash -c "cd '$PROJECT_DIR' && export MCP_SERVER_URL='http://localhost:7000' && ./run-databricks-app-local.sh ui_app 7002 7003 daveok $DEV_FLAG > ui-app.log 2>&1"
 
 echo ""
 echo "⏳ Waiting for UI app to initialize (up to 90s)..."
@@ -49,7 +51,7 @@ WAIT=0
 UI_READY=false
 
 while [ $WAIT -lt $MAX_WAIT ]; do
-    if curl -s http://localhost:9003/ > /dev/null 2>&1; then
+    if curl -s http://localhost:7003/ > /dev/null 2>&1; then
         UI_READY=true
         echo "   ✅ UI app ready"
         break
@@ -71,7 +73,7 @@ else
 fi
 echo ""
 echo "📍 Access point:"
-echo "   UI App:   http://localhost:9003"
+echo "   UI App:   http://localhost:7003"
 echo ""
 echo "📊 View logs:"
 echo "   tail -f ui-app.log   # View UI app logs"
