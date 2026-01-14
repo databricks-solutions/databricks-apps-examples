@@ -296,99 +296,155 @@ async def list_forecasts_with_optimization():
 @api.post("/run_optimization", operation_id="runOptimization")
 async def run_optimization(payload: dict):
     """
-    Trigger range optimization for a submitted forecast.
-    
+    Trigger range optimization using ML serving endpoint with Feature Store.
+
     This endpoint:
-    1. Reads the submitted forecast data
-    2. Runs the EOQ-based optimization model
-    3. Writes optimized results to opt_planogram table
-    
+    1. Reads the submitted forecast data (SKU_IDs)
+    2. Fetches features from Feature Store (Unity Catalog)
+    3. Calls ML serving endpoint for predictions
+    4. Writes optimized results to opt_planogram table
+
     Args:
         payload: Dict with 'forecast_id' or 'run_id'
-    
+
     Returns:
         Status and SKU count
     """
     forecast_id = payload.get("forecast_id") or payload.get("run_id")
-    
+
     if not forecast_id:
         raise HTTPException(status_code=400, detail="Missing forecast_id or run_id")
-    
-    logger.info(f"Running optimization for forecast: {forecast_id}")
-    
+
+    logger.info(f"Running ML optimization for forecast: {forecast_id}")
+
     # Read submitted forecast data
     runs_table = db_config.get_full_table_name(db_config.TABLE_OPTIMIZATION_RUNS)
     query = f'SELECT * FROM {runs_table} WHERE "RUN_ID" = %s'
-    
+
     try:
         forecast_df = query_df(query, (forecast_id,))
-        
+
         if forecast_df.empty:
             raise HTTPException(status_code=404, detail=f"Forecast {forecast_id} not found")
-        
+
         logger.info(f"Found {len(forecast_df)} SKUs to optimize")
-        
-        # Run optimization model
-        from .ml.stock_optimizer import StockOptimizer, OptimizationConfig
-        
-        optimizer = StockOptimizer(config=OptimizationConfig())
-        
-        # Prepare optimization results
+
+        # Get SKU_IDs from forecast
+        sku_ids = forecast_df['SKU_ID'].tolist()
+        sku_ids_str = "','".join(sku_ids)
+
+        # Fetch features from Feature Store (Unity Catalog)
+        logger.info("Fetching features from Feature Store...")
+        try:
+            from databricks.sdk.runtime import spark
+
+            features_query = f"""
+                SELECT
+                    p.SKU_ID,
+                    p.SKU_NAME,
+                    p.UNIT_COST,
+                    p.UNIT_PRICE,
+                    p.CATEGORY,
+                    p.SEGMENT,
+                    p.BRAND,
+                    p.PACK_WIDTH_MM,
+                    p.IS_MUST_STOCK,
+                    p.IS_PRIVATE_LABEL,
+                    p.CURRENT_FACINGS,
+                    d.WEEKLY_UNITS,
+                    d.DEMAND_STD,
+                    d.FORECAST_4W
+                FROM smarter_forecasting.stock_optimization.sku_features p
+                JOIN smarter_forecasting.stock_optimization.demand_features d
+                    ON p.SKU_ID = d.SKU_ID
+                WHERE p.SKU_ID IN ('{sku_ids_str}')
+            """
+
+            features_df = spark.sql(features_query).toPandas()
+            logger.info(f"Fetched features for {len(features_df)} SKUs from Feature Store")
+
+        except Exception as e:
+            logger.error(f"Failed to fetch features from Feature Store: {e}")
+            raise HTTPException(status_code=500, detail=f"Feature Store error: {str(e)}")
+
+        # Call ML serving endpoint
+        logger.info("Calling ML serving endpoint...")
+        try:
+            from databricks.sdk import WorkspaceClient
+            import requests
+
+            w = WorkspaceClient()
+            endpoint_name = "range-optimizer-model"
+            endpoint_url = f"{w.config.host}/serving-endpoints/{endpoint_name}/invocations"
+
+            payload_data = {
+                "dataframe_records": features_df.to_dict(orient='records')
+            }
+
+            headers = {
+                "Authorization": f"Bearer {w.config.token}",
+                "Content-Type": "application/json"
+            }
+
+            response = requests.post(endpoint_url, json=payload_data, headers=headers, timeout=120)
+
+            if response.status_code != 200:
+                logger.error(f"Endpoint returned error {response.status_code}: {response.text}")
+                raise HTTPException(status_code=500, detail=f"Endpoint error: {response.text}")
+
+            results_data = response.json()
+            logger.info(f"Received predictions from ML endpoint")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to call ML endpoint: {e}")
+            raise HTTPException(status_code=500, detail=f"ML endpoint error: {str(e)}")
+
+        # Parse results and prepare for database
+        predictions = results_data.get('predictions', [])
+
+        if not predictions:
+            raise HTTPException(status_code=500, detail="No predictions returned from ML endpoint")
+
+        # Map predictions to opt_planogram schema
         results = []
-        for _, row in forecast_df.iterrows():
-            # Calculate optimal facings using EOQ logic
-            # For simplicity, using facings as a proxy for stock units
-            weekly_demand = float(row.get("WEEKLY_UNITS", 0))
-            current_facings = int(row.get("CURRENT_FACINGS", 1))
-            pack_width_mm = int(row.get("PACK_WIDTH_MM", 100))
-            
-            # Simple optimization: match facings to demand ratio
-            # In real scenario, would use optimizer.optimize_single_product()
-            demand_facing_ratio = weekly_demand / max(current_facings, 1)
-            
-            if demand_facing_ratio > 5:  # High demand, low facings
-                recommended_facings = min(current_facings + 2, 10)
-                change = "increase"
-            elif demand_facing_ratio < 1:  # Low demand, high facings
-                recommended_facings = max(current_facings - 1, 1)
-                change = "decrease"
-            else:
-                recommended_facings = current_facings
-                change = "maintain"
-            
-            facings_change = recommended_facings - current_facings
-            expected_margin = weekly_demand * 2.5  # Simplified margin calc
-            score = min(demand_facing_ratio / 5, 1.0)  # Confidence score
-            
+        for pred in predictions:
             results.append({
                 "optimization_run_id": forecast_id,
-                "sku_id": row.get("SKU_ID"),
-                "sku_name": row.get("SKU_NAME"),
-                "category": row.get("CATEGORY"),
-                "current_facings": current_facings,
-                "recommended_facings": recommended_facings,
-                "facings_change": facings_change,
-                "change_from_current": change,
-                "expected_units_weekly": weekly_demand,
-                "expected_margin_weekly": expected_margin,
-                "score": score,
+                "sku_id": pred.get("sku_id", pred.get("SKU_ID", "")),
+                "sku_name": pred.get("sku_name", pred.get("SKU_NAME", "")),
+                "category": pred.get("category", pred.get("CATEGORY", "")),
+                "segment": pred.get("segment", ""),
+                "brand": pred.get("brand", ""),
+                "current_facings": int(pred.get("current_facings", 0)),
+                "recommended_facings": int(pred.get("recommended_facings", 0)),
+                "facings_change": int(pred.get("facings_change", 0)),
+                "change_from_current": pred.get("change_from_current", "maintain"),
+                "expected_units_weekly": float(pred.get("expected_units_weekly", 0)),
+                "expected_margin_weekly": float(pred.get("expected_margin_weekly", 0)),
+                "space_productivity": float(pred.get("space_productivity", 0)),
+                "score": float(pred.get("score", 0)),
+                "is_must_stock": bool(pred.get("is_must_stock", False)),
+                "is_private_label": bool(pred.get("is_private_label", False)),
                 "optimization_timestamp": datetime.datetime.now().isoformat(),
             })
-        
+
         # Write results to opt_planogram table
         results_df = pd.DataFrame(results)
         opt_table = db_config.opt_planogram_table
-        
+
         rows_inserted = bulk_insert(opt_table, results_df, overwrite=False)
-        logger.info(f"Wrote {rows_inserted} optimization results to {opt_table}")
-        
+        logger.info(f"Wrote {rows_inserted} ML optimization results to {opt_table}")
+
         return {
             "status": "success",
             "forecast_id": forecast_id,
             "product_count": len(results),
-            "message": f"Optimized {len(results)} SKUs"
+            "message": f"Optimized {len(results)} SKUs using ML endpoint with Feature Store",
+            "method": "ml_serving_endpoint"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
