@@ -20,6 +20,7 @@ Authentication:
 
 import os
 import datetime
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 import requests
@@ -31,6 +32,8 @@ from requests.exceptions import RequestException, Timeout, ConnectionError
 # =============================================================================
 
 REQUEST_TIMEOUT = 30  # seconds
+MAX_RETRIES = 3  # Number of retries for transient failures
+RETRY_DELAY = 1.0  # Initial delay between retries (seconds)
 
 # Cache WorkspaceClient for reuse (singleton pattern)
 _workspace_client = None
@@ -299,6 +302,8 @@ def get_optimization_runs(limit: int = 20) -> APIResponse:
     """
     Fetch list of optimization runs from MCP server.
     
+    Includes retry logic for transient failures (e.g., server starting up).
+    
     Args:
         limit: Maximum runs to return
         
@@ -308,25 +313,51 @@ def get_optimization_runs(limit: int = 20) -> APIResponse:
     mcp_url = _get_mcp_url()
     _log(f"📡 GET /api/optimization-runs - limit: {limit}")
     
-    try:
-        headers = _get_auth_headers() or {}
-        
-        response = requests.get(
-            f"{mcp_url}/api/optimization-runs",
-            params={"limit": limit},
-            headers=headers,
-            timeout=REQUEST_TIMEOUT
-        )
-        response.raise_for_status()
-        result = response.json()
-        
-        runs = result.get("runs", [])
-        _log(f"✓ Got {len(runs)} optimization runs")
-        return APIResponse(success=True, data=runs)
-        
-    except RequestException as e:
-        _log(f"❌ Error: {e}")
-        return APIResponse(success=False, data=[], error=str(e))
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            headers = _get_auth_headers() or {}
+            
+            response = requests.get(
+                f"{mcp_url}/api/optimization-runs",
+                params={"limit": limit},
+                headers=headers,
+                timeout=REQUEST_TIMEOUT
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            runs = result.get("runs", [])
+            _log(f"✓ Got {len(runs)} optimization runs")
+            return APIResponse(success=True, data=runs)
+            
+        except requests.exceptions.HTTPError as e:
+            # Retry on 500 errors (server may be starting up)
+            if e.response.status_code == 500 and attempt < MAX_RETRIES - 1:
+                delay = RETRY_DELAY * (2 ** attempt)  # Exponential backoff
+                _log(f"⚠️ Got 500 error, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+                last_error = e
+                continue
+            _log(f"❌ Error: {e}")
+            return APIResponse(success=False, data=[], error=str(e))
+        except ConnectionError as e:
+            # Retry on connection errors (server may not be ready yet)
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_DELAY * (2 ** attempt)
+                _log(f"⚠️ Connection error, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+                last_error = e
+                continue
+            _log(f"❌ Connection error: {e}")
+            return APIResponse(success=False, data=[], error=str(e))
+        except RequestException as e:
+            _log(f"❌ Error: {e}")
+            return APIResponse(success=False, data=[], error=str(e))
+    
+    # Exhausted all retries
+    _log(f"❌ All {MAX_RETRIES} retries exhausted")
+    return APIResponse(success=False, data=[], error=str(last_error) if last_error else "Max retries exceeded")
 
 
 def get_optimization_results(run_id: str) -> APIResponse:
