@@ -18,9 +18,9 @@ The system uses Databricks Lakebase (PostgreSQL) for data storage with Unity Cat
 # Start both apps (recommended)
 ./start-all-apps.sh
 
-# Start individual apps with custom ports
-./run-databricks-app-local.sh mcp_app 9000 9001 username
-./run-databricks-app-local.sh ui_app 9002 9003 username
+# Start individual apps with custom ports (using 7000-7003 to avoid SSH conflicts)
+./run-databricks-app-local.sh mcp_app 7000 7001 username
+./run-databricks-app-local.sh ui_app 7002 7003 username
 
 # Stop all apps
 ./stop-all-apps.sh
@@ -38,7 +38,7 @@ The system uses Databricks Lakebase (PostgreSQL) for data storage with Unity Cat
 # Run all validation tests
 uv run python test_validation.py
 
-# Run MCP API tests (requires MCP server running at localhost:9001)
+# Run MCP API tests (requires MCP server running at localhost:7000)
 uv run python test_mcp_api.py
 
 # Run specific test file
@@ -285,8 +285,8 @@ PGPORT=5432
 PGDATABASE=databricks_postgres
 PGUSER=your.email@company.com
 
-# MCP Server URL (for UI app)
-MCP_SERVER_URL=http://localhost:9001
+# MCP Server URL (for UI app) - use port 7000 (app port) for reliability
+MCP_SERVER_URL=http://localhost:7000
 ```
 
 ## Security Considerations

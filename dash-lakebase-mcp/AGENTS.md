@@ -9,10 +9,11 @@ This repository contains a Python-based range optimization system with two main 
   - Serves at `http://localhost:8003` (default)
   - FastAPI backend with Dash UI at `/` and REST API at `/api`
   - Restricted database permissions
-- **MCP App** (`mcp_app/`): Standalone MCP server for AI tooling
-  - Serves at `http://localhost:9001` (default) 
+  - **MCP App** (`mcp_app/`): Standalone MCP server for AI tooling
+  - Serves at `http://localhost:7001` (proxy) or `http://localhost:7000` (direct, default)
   - Elevated permissions for optimization and AI operations
   - Used by Claude Desktop and other MCP clients
+  - Uses port range 7000-7003 to avoid conflicts with SSH port forwarding
 
 ## 🚀 Build/Test Commands
 
@@ -26,9 +27,9 @@ This repository contains a Python-based range optimization system with two main 
 # Start both apps simultaneously (recommended)
 ./start-all-apps.sh
 
-# Start individual apps with custom ports
-./run-databricks-app-local.sh mcp_app 9000 9001 username
-./run-databricks-app-local.sh ui_app 9002 9003 username
+# Start individual apps with custom ports (using 7000-7003 to avoid SSH conflicts)
+./run-databricks-app-local.sh mcp_app 7000 7001 username
+./run-databricks-app-local.sh ui_app 7002 7003 username
 
 # Stop all apps
 ./stop-all-apps.sh
@@ -39,7 +40,7 @@ This repository contains a Python-based range optimization system with two main 
 # Run all validation tests
 uv run python test_validation.py
 
-# Run MCP API tests (requires server running at localhost:9001)
+# Run MCP API tests (requires server running at localhost:7000)
 uv run python test_mcp_api.py
 
 # Run a single test file with pytest
