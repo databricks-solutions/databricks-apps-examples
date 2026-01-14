@@ -1,349 +1,446 @@
-# 📊 Stock Optimization ML Model - Databricks Implementation
+# Range Optimizer: Delta Lake Backend Setup
 
-This folder contains notebooks for training, registering, and deploying a classical ML model for stock optimization using **Databricks best practices** with **Feature Store** and **Unity Catalog** integration.
+This directory contains notebooks for setting up the complete Delta Lake backend in Unity Catalog to support the Range Optimizer ML model.
 
-## 🎯 Overview
+## 📋 Overview
 
-This implementation demonstrates the complete ML lifecycle for a classical optimization model on Databricks:
+The Range Optimizer uses a **hybrid architecture**:
 
-1. **Feature Engineering**: Create and manage features in Unity Catalog
-2. **Model Training**: Train with automatic feature lookup using `FeatureLookup`
-3. **Model Registration**: Register to Unity Catalog with feature metadata
-4. **Model Serving**: Deploy with automatic feature retrieval from Feature Store
+- **Lakebase (PostgreSQL)**: Operational data store for real-time app operations
+- **Unity Catalog (Delta Lake)**: Analytical data warehouse for ML training and optimization
 
-## 📚 Architecture
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Unity Catalog                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  Feature Tables                    Models                        │
-│  ├── product_features         ├── stock_optimizer (v1)          │
-│  │   ├── SELL_ID (PK)         │   ├── @production               │
-│  │   ├── UNIT_COST            │   ├── @champion                 │
-│  │   ├── SELLING_PRICE        │   └── Feature Lineage →         │
-│  │   └── ...                  │                                 │
-│  └── demand_features          │                                 │
-│      ├── SELL_ID (PK)         │                                 │
-│      ├── AVG_DAILY_DEMAND     │                                 │
-│      ├── DEMAND_STD           │                                 │
-│      └── ...                  │                                 │
-│                                                                   │
+│                    Data Architecture                             │
 └─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     Model Serving Endpoint                       │
-├─────────────────────────────────────────────────────────────────┤
-│  Input: {"SELL_ID": "SKU4001"}                                  │
-│         ↓                                                        │
-│  Automatic Feature Lookup → Product + Demand Features           │
-│         ↓                                                        │
-│  EOQ Optimization Model                                          │
-│         ↓                                                        │
-│  Output: {OPTIMAL_ORDER_QTY, SAFETY_STOCK, ...}                 │
-└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐         ┌──────────────────┐         ┌───────────────┐
+│   MCP App       │────────▶│    Lakebase      │────────▶│  Unity Catalog│
+│  (FastAPI)      │         │  (PostgreSQL)    │         │  (Delta Lake) │
+│                 │         │                  │         │               │
+│ • User edits    │         │ • Transactional  │         │ • Analytics   │
+│ • AI assistant  │         │ • Real-time      │         │ • ML training │
+│ • Optimization  │         │ • Single schema  │         │ • Star schema │
+└─────────────────┘         └──────────────────┘         └───────────────┘
+                                     │                            │
+                                     │                            │
+                                     ▼                            ▼
+                            ┌──────────────────┐         ┌───────────────┐
+                            │  UI App (Dash)   │         │ ML Pipeline   │
+                            │                  │         │               │
+                            │ • Data grids     │         │ • Feature eng │
+                            │ • Dashboards     │         │ • Model train │
+                            │ • Visualizations │         │ • Serving     │
+                            └──────────────────┘         └───────────────┘
 ```
 
-## 📖 Notebooks
+## 📚 Notebooks
 
-### 00. Create Feature Tables
-**File**: `00_create_feature_tables.py`
+### 1. `00_setup_delta_backend.py`
 
-Creates feature tables in Unity Catalog for stock optimization:
+**Purpose:** Create complete star schema in Unity Catalog
 
-- **Product Features**: Static attributes (costs, prices, categories, shelf space)
-- **Demand Features**: Time-varying demand forecasts and volatility
+**Creates:**
+- 5 dimensional tables (`dim_sku`, `dim_store`, `dim_category`, `dim_brand`, `dim_time`)
+- 3 fact tables (`fact_sales_weekly`, `fact_planogram_current`, `fact_shelf_inventory`)
+- 3 configuration tables (`cfg_range_constraints`, `cfg_merchandising_rules`, `cfg_sku_cost_margin`)
+- 2 analytics tables (`agg_sku_performance_weekly`, `ml_demand_forecast`)
+- 3 optimization tables (`opt_recommended_planogram`, `opt_optimization_run_summary`, `opt_constraint_violations`)
 
-**Key Concepts**:
-- Feature Engineering Client for Unity Catalog
-- Feature table creation with primary keys
-- Realistic retail product data generation
+**Parameters:**
+- `catalog`: Target Unity Catalog name (default: `range_optimizer_catalog`)
+- `schema`: Target schema name (default: `range_optimizer`)
+- `catalog_storage_location`: ADLS Gen2 path for catalog storage
+- `load_sample_data`: Whether to load sample data (default: `true`)
 
-**Run First**: This notebook must be run before training.
+**Sample Data:**
+- 15 SKUs across 3 categories (Beer & Seltzer, Hot Sauce, Ice Cream)
+- 2 stores in Melbourne
+- 52 weeks of synthetic sales data
+- Demand forecasts for all SKUs
 
-### 01. Train Stock Optimizer
-**File**: `01_train_stock_optimizer.py`
+**Run:**
+```bash
+databricks jobs run-now --job-name "Setup Delta Backend"
+```
 
-Trains the stock optimization model using Economic Order Quantity (EOQ) with Feature Store integration:
+Or interactively in Databricks notebook.
 
-**Key Concepts**:
-- `FeatureLookup`: Define which features to use from feature tables
-- `FeatureEngineeringClient.create_training_set()`: Create training set with automatic feature joining
-- `fe.log_model()`: Register model with feature metadata (not `mlflow.log_model()`)
-- Model signatures and input examples
-- Unity Catalog model registration
-- Model aliases (@production, @champion)
+---
 
-**Algorithm**: EOQ with safety stock optimization
-- Minimizes total inventory cost (holding + ordering)
-- Accounts for demand variability and lead time
-- Calculates optimal reorder points and quantities
+### 2. `00a_replicate_lakebase_to_delta.sql`
 
-### 02. Deploy Serving Endpoint
-**File**: `02_deploy_serving_endpoint.py`
+**Purpose:** Replicate operational data from Lakebase to Delta staging tables
 
-Deploys the model to a serving endpoint with automatic feature lookup:
+**Why needed:**
+- Lakebase can ONLY be accessed via SQL Warehouse (DBSQL), not Spark compute
+- ML pipelines require Spark compute for feature engineering
+- Solution: CTAS (Create Table As Select) to replicate to Delta
 
-**Key Concepts**:
-- Model Serving endpoint creation
-- Automatic feature retrieval from Unity Catalog
-- Minimal input requirements (just `SELL_ID`)
-- Feature override capability for what-if analysis
+**Replicates:**
+- `dim_sku` → `dim_sku_staging`
+- `dim_category` → `dim_category_staging`
+- `dim_brand` → `dim_brand_staging`
+- `fact_sales_weekly` → `fact_sales_staging` (last 52 weeks)
+- `ml_demand_forecast` → `ml_demand_forecast_staging`
+- `opt_recommended_planogram` → `opt_planogram_staging` (last 30 days)
+
+**Schedule:** Daily at 2:00 AM via SQL Warehouse job
+
+**Run:**
+```sql
+-- Set parameters in notebook
+SET catalog = range_optimizer_catalog;
+SET target_catalog = smarter_forecasting;
+SET schema = range_optimizer;
+SET target_schema = stock_optimization;
+
+-- Run all cells
+```
+
+---
+
+### 3. `00_create_feature_tables.py`
+
+**Purpose:** Create Feature Store tables for ML model training
+
+**Creates:**
+- `sku_features`: Static product attributes (cost, price, category, shelf space)
+- `demand_features`: Demand forecasts and volatility metrics
+
+**Data source:** Delta staging tables (replicated from Lakebase)
+
+**Features:**
+- Uses Databricks Feature Engineering Client
+- Automatic feature lookup during inference
+- Feature-to-model lineage tracking
+
+**Run:**
+```python
+uv run databricks jobs run-now --job-name "Create Feature Tables"
+```
+
+---
+
+### 4. `01_train_stock_optimizer.py`
+
+**Purpose:** Train EOQ-based stock optimization model using Feature Store
+
+**Algorithm:** Economic Order Quantity (EOQ) with safety stock optimization
+
+**Inputs:**
+- SKU features (from Feature Store)
+- Demand features (from Feature Store)
+- Business constraints (from config tables)
+
+**Outputs:**
+- Optimal order quantity
+- Safety stock levels
+- Reorder points
+- Expected costs and profitability
+
+**Model registration:** Logs to MLflow with Feature Store metadata
+
+**Run:**
+```python
+uv run databricks jobs run-now --job-name "Train Stock Optimizer"
+```
+
+---
+
+### 5. `02_deploy_serving_endpoint.py`
+
+**Purpose:** Deploy trained model to Databricks Model Serving
+
+**Creates:**
+- Real-time serving endpoint
 - Auto-scaling configuration
+- Feature lookup integration
 
-### 03. Analyze Results (Optional)
-**File**: `03_analyze_optimization_results.py`
+**Endpoint:** `stock-optimizer-serving`
 
-Analyzes optimization results and compares scenarios:
-- Financial impact analysis
-- Sensitivity analysis
-- Category-level insights
+**Run:**
+```python
+uv run databricks jobs run-now --job-name "Deploy Serving Endpoint"
+```
 
-## 🚀 Quick Start
+---
+
+## 🔄 Data Flow
+
+### Complete Pipeline
+
+```
+1. User edits data in UI App (Dash)
+           ↓
+2. Changes written to Lakebase (PostgreSQL)
+           ↓
+3. Daily replication job copies to Delta staging tables
+           ↓
+4. Feature engineering creates feature tables
+           ↓
+5. Model training uses Feature Store
+           ↓
+6. Model deployed to serving endpoint
+           ↓
+7. MCP App calls optimization endpoint
+           ↓
+8. Results written back to Lakebase
+           ↓
+9. UI App displays recommendations
+```
+
+### Daily Schedule
+
+| Time | Job | Purpose |
+|------|-----|---------|
+| 02:00 | Lakebase → Delta replication | Sync operational data |
+| 03:00 | Feature engineering | Update feature tables |
+| 04:00 | Model training (weekly) | Retrain optimization model |
+| 05:00 | Model deployment (weekly) | Update serving endpoint |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-1. **Unity Catalog enabled** in your workspace
-2. **Compute cluster** with:
-   - Databricks Runtime 13.3 LTS ML or above
-   - Single-user or dedicated group access mode
-3. **Permissions**:
-   - `CREATE MODEL` and `USE SCHEMA` on the target schema
-   - `CREATE TABLE` for feature tables
-   - Serving endpoint creation privileges
+1. **Unity Catalog setup:**
+   ```bash
+   # Verify Unity Catalog access
+   uv run python scripts/verify_uc_catalog.py
+   ```
 
-### Step 1: Configure
+2. **Lakebase instance running:**
+   ```bash
+   # Check Lakebase connection
+   databricks database list-database-instances
+   ```
 
-Edit the configuration in each notebook:
+3. **SQL Warehouse available:**
+   ```bash
+   # List SQL Warehouses
+   databricks sql-warehouses list
+   ```
 
-```python
-CATALOG = "smarter_forecasting"     # Your Unity Catalog name
-SCHEMA = "stock_optimization"       # Schema name
-MODEL_NAME = "stock_optimizer"      # Model name
+### Initial Setup
+
+1. **Create Unity Catalog schema:**
+   ```bash
+   # Run setup notebook
+   databricks jobs create --json @jobs/setup_delta_backend.json
+   databricks jobs run-now --job-name "Setup Delta Backend"
+   ```
+
+2. **Verify tables created:**
+   ```sql
+   USE CATALOG range_optimizer_catalog;
+   USE SCHEMA range_optimizer;
+   SHOW TABLES;
+   ```
+
+3. **Load sample data** (if empty):
+   ```bash
+   # Run with load_sample_data=true
+   databricks jobs run-now --job-name "Setup Delta Backend" \
+     --notebook-params '{"load_sample_data": "true"}'
+   ```
+
+4. **Set up replication job:**
+   ```bash
+   # Create SQL Warehouse job for replication
+   databricks jobs create --json @jobs/replicate_lakebase.json
+   ```
+
+5. **Create feature tables:**
+   ```bash
+   databricks jobs run-now --job-name "Create Feature Tables"
+   ```
+
+6. **Train initial model:**
+   ```bash
+   databricks jobs run-now --job-name "Train Stock Optimizer"
+   ```
+
+7. **Deploy serving endpoint:**
+   ```bash
+   databricks jobs run-now --job-name "Deploy Serving Endpoint"
+   ```
+
+---
+
+## 📊 Schema Reference
+
+### Dimensional Tables
+
+#### `dim_sku` - Product Master
+- **Grain:** One row per SKU
+- **Key columns:** `sku_id`, `sku_name`, `brand_id`, `category_id`
+- **Metrics:** `unit_price`, `unit_cost`, `gross_margin_pct`, `weekly_units`
+- **Attributes:** `pack_width_mm`, `is_must_stock`, `sku_status`
+
+#### `dim_store` - Store Master
+- **Grain:** One row per store
+- **Key columns:** `store_id`, `store_code`, `planogram_cluster_id`
+- **Attributes:** `store_format`, `region_name`, `city`, `affluence_segment`
+
+#### `dim_category` - Category Hierarchy
+- **Grain:** One row per category
+- **Hierarchy:** `parent_category_id` for multi-level hierarchy
+- **Attributes:** `category_role`, `space_priority`, `is_chill_category`
+
+#### `dim_brand` - Brand Master
+- **Grain:** One row per brand
+- **Key columns:** `brand_id`, `brand_name`, `manufacturer_id`
+
+#### `dim_time` - Time Dimension
+- **Grain:** One row per week
+- **Key columns:** `time_id`, `date_key`, `week_start_date`
+- **Attributes:** `is_holiday`, `holiday_name`
+
+---
+
+### Fact Tables
+
+#### `fact_sales_weekly` - Historical Sales
+- **Grain:** Store × SKU × Week
+- **Partitioning:** By `week_start_date`
+- **Metrics:** `units_sold`, `net_sales_value`, `availability_rate`
+- **Flags:** `promo_flag`, `on_display_flag`
+
+#### `fact_planogram_current` - Current Layout
+- **Grain:** Store × Category × SKU
+- **Metrics:** `total_facings`, `effective_width_mm`, `is_eye_level`
+- **Position:** `shelf_id`, `shelf_level`, `position_order`
+
+#### `fact_shelf_inventory` - Shelf Constraints
+- **Grain:** Store × Category × Shelf
+- **Constraints:** `total_width_mm`, `max_weight_kg`
+- **Utilization:** `current_utilized_width_mm`, `current_available_width_mm`
+
+---
+
+### Configuration Tables
+
+#### `cfg_range_constraints` - Range Rules
+- **Scope:** Store or Cluster × Category
+- **Rules:** `min_range_size`, `max_range_size`, `min_facings_per_sku`
+- **Share limits:** `min_private_label_share`, `max_any_brand_share`
+- **Forced lists:** `forced_include_skus`, `forced_exclude_skus`
+
+#### `cfg_merchandising_rules` - Advanced Rules
+- **Generic structure:** `rule_type`, `parameter_1`, `parameter_1_value`
+- **Rule types:** `brand_blocking`, `adjacency`, `min_facings`, `segment_share`
+- **Priority:** Lower number = higher priority
+
+#### `cfg_sku_cost_margin` - Cost & Margin (SCD Type 2)
+- **Versioning:** `valid_from_date`, `valid_to_date`
+- **Costs:** `cost_price`, `regular_retail_price`, `suggested_promo_price`
+- **Margins:** `gross_margin_pct`, `contribution_margin`
+
+---
+
+### Analytics Tables
+
+#### `agg_sku_performance_weekly` - SKU Metrics
+- **Grain:** SKU × Week
+- **Aggregates:** `total_units_sold`, `total_sales_value`, `avg_price`
+- **Performance:** `promo_lift_pct`, `stores_in_range_count`, `segment_rank`
+
+#### `ml_demand_forecast` - Demand Forecasts
+- **Grain:** Store/Cluster × SKU × Forecast period
+- **Forecasts:** `baseline_demand_units`, `demand_with_promo_units`, `demand_with_space_units`
+- **Accuracy:** `forecast_accuracy_mape`
+
+---
+
+### Optimization Tables
+
+#### `opt_recommended_planogram` - Optimizer Output
+- **Grain:** Store/Cluster × Category × SKU × Run
+- **Partitioning:** By `optimization_run_date`
+- **Recommendations:** `is_ranged_recommended`, `recommended_facings`
+- **Expected results:** `expected_units_weekly`, `expected_margin_weekly`
+- **Change tracking:** `change_from_current`, `facings_change`, `execution_difficulty`
+
+#### `opt_optimization_run_summary` - Run Metadata
+- **Grain:** One row per optimization run
+- **Scope:** `stores_included`, `categories_included`, `clusters_optimized`
+- **Results:** `objective_value`, `total_expected_revenue`, `total_expected_margin`
+- **Solver:** `solver_name`, `solver_status`, `solver_time_seconds`
+
+#### `opt_constraint_violations` - Violations
+- **Grain:** Violation per run
+- **Details:** `constraint_type`, `violation_magnitude`, `severity`
+
+---
+
+## 🔧 Maintenance
+
+### Monitoring
+
+```sql
+-- Check replication freshness
+SELECT table_name, MAX(replicated_at) AS last_replicated
+FROM (
+  SELECT 'dim_sku_staging' AS table_name, MAX(replicated_at) AS replicated_at
+  FROM smarter_forecasting.stock_optimization.dim_sku_staging
+  UNION ALL
+  SELECT 'fact_sales_staging', MAX(replicated_at)
+  FROM smarter_forecasting.stock_optimization.fact_sales_staging
+);
+
+-- Check feature table stats
+DESCRIBE FEATURE smarter_forecasting.stock_optimization.sku_features;
+DESCRIBE FEATURE smarter_forecasting.stock_optimization.demand_features;
 ```
 
-### Step 2: Run Notebooks in Order
+### Troubleshooting
 
+**Issue:** Lakebase tables not found
 ```bash
-00_create_feature_tables.py    # Create feature tables
-01_train_stock_optimizer.py    # Train and register model
-02_deploy_serving_endpoint.py  # Deploy to serving endpoint
+# Verify Lakebase catalog registration
+uv run python scripts/verify_uc_catalog.py
+
+# Re-register if needed
+uv run python scripts/register_database_to_uc.py
 ```
 
-### Step 3: Use the Model
-
-**Batch Inference** (with automatic feature lookup):
-
+**Issue:** Feature table lookup fails
 ```python
-import mlflow
-mlflow.set_registry_uri("databricks-uc")
-
-# Load model
-model = mlflow.pyfunc.load_model("models:/main.stock_optimization.stock_optimizer@production")
-
-# Predict - only need SELL_IDs!
-input_df = pd.DataFrame([
-    {'SELL_ID': 'SKU4001', 'PRODUCT_NAME': 'Stone & Wood Pacific Ale 6pk'},
-    {'SELL_ID': 'SKU4002', 'PRODUCT_NAME': 'Balter XPA 4pk'},
-])
-
-results = model.predict(input_df)  # Features fetched automatically!
-```
-
-**Real-time Inference** (via serving endpoint):
-
-```python
-import requests
-
-response = requests.post(
-    f"{workspace_url}/serving-endpoints/stock-optimization-model/invocations",
-    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-    json={"dataframe_records": [
-        {'SELL_ID': 'SKU4001', 'PRODUCT_NAME': 'Stone & Wood Pacific Ale 6pk'}
-    ]}
-)
-
-results = response.json()
-```
-
-## 🔑 Key Features
-
-### 1. Feature Store Integration
-
-**Automatic Feature Lookup**: Models registered with `fe.log_model()` automatically retrieve features during inference:
-
-```python
-# Training
-training_set = fe.create_training_set(
-    df=base_df,
-    feature_lookups=[
-        FeatureLookup(table_name="product_features", feature_names=[...], lookup_key="SELL_ID"),
-        FeatureLookup(table_name="demand_features", feature_names=[...], lookup_key="SELL_ID"),
-    ]
-)
-
-# Register with feature metadata
-fe.log_model(
-    model=model,
-    training_set=training_set,  # Links model to features
-    registered_model_name="main.stock_optimization.stock_optimizer"
-)
-```
-
-### 2. Unity Catalog Governance
-
-**Complete Lineage**: View feature-to-model lineage in Catalog Explorer
-- Tracks which features were used to train each model version
-- Shows feature table versions and dependencies
-- Enables impact analysis for feature changes
-
-**Access Control**: Unified governance across features and models
-- Control who can read features
-- Control who can use models
-- Audit all access
-
-### 3. Classical ML Best Practices
-
-Following Databricks documentation patterns:
-
-- ✅ Model signatures with input examples
-- ✅ MLflow pyfunc wrapper for consistency
-- ✅ Parameter and metric logging
-- ✅ Model aliases for deployment stages
-- ✅ Feature Engineering client (not legacy FeatureStoreClient)
-- ✅ Unity Catalog (not workspace registry)
-
-## 📊 Model Details
-
-### Economic Order Quantity (EOQ) Model
-
-**Formula**:
-```
-EOQ = √((2 × D × S) / (H × C))
-```
-
-Where:
-- **D** = Annual demand
-- **S** = Ordering cost per order
-- **H** = Holding cost rate
-- **C** = Unit cost per item
-
-**Safety Stock**:
-```
-Safety Stock = Z × σ × √L
-```
-
-Where:
-- **Z** = Service level factor (z-score)
-- **σ** = Demand standard deviation
-- **L** = Lead time in days
-
-**Reorder Point**:
-```
-ROP = (Average Daily Demand × Lead Time) + Safety Stock
-```
-
-### Model Inputs (from Feature Store)
-
-From **Product Features**:
-- `UNIT_COST`: Cost per unit
-- `SELLING_PRICE`: Selling price per unit
-- `CATEGORY_NAME`: Product category
-- `SUBCATEGORY_NAME`: Product subcategory
-- `SHELF_SPACE_CM`: Shelf space allocation
-
-From **Demand Features**:
-- `AVG_DAILY_DEMAND`: Average daily demand forecast
-- `DEMAND_STD`: Demand standard deviation (volatility)
-- `TOTAL_FORECAST_30D`: 30-day total forecast
-
-### Model Outputs
-
-- `OPTIMAL_ORDER_QTY`: Recommended order quantity
-- `SAFETY_STOCK`: Safety stock level
-- `REORDER_POINT`: When to reorder
-- `MAX_STOCK_LEVEL`: Maximum inventory level
-- `ANNUAL_HOLDING_COST`: Annual holding cost
-- `ANNUAL_ORDERING_COST`: Annual ordering cost
-- `TOTAL_ANNUAL_COST`: Total annual cost
-- `EXPECTED_ANNUAL_REVENUE`: Expected revenue
-- `EXPECTED_ANNUAL_PROFIT`: Expected profit
-- `TURNOVER_RATE`: Inventory turnover rate
-
-## 🔄 Feature Updates
-
-In production, update features regularly:
-
-```python
+# Check feature table registration
 from databricks.feature_engineering import FeatureEngineeringClient
 fe = FeatureEngineeringClient()
-
-# Update demand forecasts daily
-fe.write_table(
-    name="main.stock_optimization.demand_features",
-    df=new_demand_forecasts_df,
-    mode='merge'
-)
-
-# Models automatically use updated features!
+fe.get_table(name="smarter_forecasting.stock_optimization.sku_features")
 ```
 
-## 🎓 Learning Resources
+**Issue:** Model serving endpoint down
+```bash
+# Check endpoint status
+databricks serving-endpoints get --name stock-optimizer-serving
 
-### Databricks Documentation
-- [End-to-end Classic ML on Databricks](https://docs.databricks.com/mlflow/end-to-end-example.html)
-- [Feature Store with Unity Catalog](https://docs.databricks.com/machine-learning/feature-store/train-models-with-feature-store.html)
-- [Models in Unity Catalog](https://docs.databricks.com/machine-learning/manage-model-lifecycle/)
-- [Model Serving](https://docs.databricks.com/machine-learning/model-serving/)
-
-### Key Concepts
-- **FeatureLookup**: Defines features to retrieve from feature tables
-- **TrainingSet**: Dataset with automatically joined features
-- **fe.log_model()**: Registers model with feature metadata
-- **Automatic Feature Lookup**: Model fetches features during inference
-- **Model Aliases**: Manage deployment stages (@production, @champion)
-
-## 🛠️ Troubleshooting
-
-### "Model signature required"
-**Solution**: Use `input_example` parameter or define signature explicitly:
-```python
-signature = infer_signature(training_df, predictions)
+# Restart if needed
+databricks serving-endpoints update --name stock-optimizer-serving --config @serving_config.json
 ```
 
-### "Features not found during inference"
-**Solution**: Ensure features exist in feature tables and SELL_ID matches:
-```python
-spark.sql(f"SELECT * FROM {PRODUCT_FEATURES_TABLE} WHERE SELL_ID = 'SKU4001'")
-```
+---
 
-### "Permission denied"
-**Solution**: Grant required privileges:
-```sql
-GRANT USE CATALOG ON CATALOG main TO `user@company.com`;
-GRANT USE SCHEMA ON SCHEMA main.stock_optimization TO `user@company.com`;
-GRANT CREATE MODEL ON SCHEMA main.stock_optimization TO `user@company.com`;
-GRANT SELECT ON TABLE main.stock_optimization.product_features TO `user@company.com`;
-```
+## 📚 Additional Resources
 
-## 📈 Next Steps
+- [Range Optimizer Schema Reference](../ui_app/range_optimizer_schema.md)
+- [MCP App Documentation](../mcp_app/README.md)
+- [UI App Documentation](../ui_app/README.md)
+- [Databricks Feature Store Docs](https://docs.databricks.com/machine-learning/feature-store/index.html)
+- [Unity Catalog Docs](https://docs.databricks.com/data-governance/unity-catalog/index.html)
 
-1. **Monitor Model Performance**: Set up monitoring dashboards
-2. **A/B Testing**: Compare different optimization strategies
-3. **Feature Engineering**: Add more sophisticated demand forecasts
-4. **Model Improvements**: Incorporate seasonality, promotions, constraints
-5. **Integration**: Connect to inventory management systems
+---
 
-## 🤝 Contributing
+## 🎯 Next Steps
 
-When adding new features or models:
-1. Follow the established patterns in these notebooks
-2. Use `fe.log_model()` for Feature Store integration
-3. Register all models to Unity Catalog
-4. Document feature dependencies
-5. Add comprehensive tests
-
-## 📄 License
-
-This example code is provided for educational purposes.
+1. **Schedule jobs:** Set up daily replication and weekly retraining
+2. **Monitor performance:** Track model accuracy and optimization quality
+3. **Extend schema:** Add competitor pricing, promotional calendar, etc.
+4. **Optimize queries:** Add materialized views for common analytics
+5. **Implement CDC:** Use Change Data Capture for real-time sync

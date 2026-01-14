@@ -39,26 +39,38 @@
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
+# Define widgets for job parameters (works when running interactively or as a job)
+dbutils.widgets.text("target_catalog", "smarter_forecasting", "Target Catalog Name")
+dbutils.widgets.text("target_schema", "range_optimizer", "Target Schema Name")
+dbutils.widgets.text("catalog_storage_location", 
+                     "abfss://iceberg@stdavidokeeffeinterop02.dfs.core.windows.net/root/catalogs/smarter_forecasting",
+                     "Catalog Storage Location")
+dbutils.widgets.dropdown("replication_mode", "full", ["full", "incremental"], "Replication Mode")
+
 # Source: Registered Lakebase catalog in Unity Catalog (read-only)
 SOURCE_CATALOG = "range_optimizer_catalog"  # The registered Lakebase catalog
 SOURCE_SCHEMA = "range_optimizer"
 SOURCE_TABLE = "sku_data"
 SOURCE_FULL_PATH = f"{SOURCE_CATALOG}.{SOURCE_SCHEMA}.{SOURCE_TABLE}"
 
-# Target: Delta Lake in Unity Catalog
-TARGET_CATALOG = "smarter_forecasting"  # Or your preferred catalog
-TARGET_SCHEMA = "range_optimizer"
+# Target: Delta Lake in Unity Catalog (from widgets)
+TARGET_CATALOG = dbutils.widgets.get("target_catalog")
+TARGET_SCHEMA = dbutils.widgets.get("target_schema")
 TARGET_TABLE = "delta_sku_data"
 TARGET_FULL_PATH = f"{TARGET_CATALOG}.{TARGET_SCHEMA}.{TARGET_TABLE}"
 
+# Storage location for managed catalog (required when metastore has no root credential)
+CATALOG_STORAGE_LOCATION = dbutils.widgets.get("catalog_storage_location")
+
 # Replication Settings
-REPLICATION_MODE = "full"  # "full" or "incremental"
+REPLICATION_MODE = dbutils.widgets.get("replication_mode")
 PRIMARY_KEY = "SELL_ID"  # Primary key for MERGE operations
 INCREMENTAL_COLUMN = "UPDATED_AT"  # Timestamp column for incremental sync
 
 print(f"📥 Source (Lakebase UC Catalog): {SOURCE_FULL_PATH}")
 print(f"📤 Target (Delta Lake): {TARGET_FULL_PATH}")
 print(f"🔄 Mode: {REPLICATION_MODE.upper()}")
+print(f"📁 Target Catalog Storage: {CATALOG_STORAGE_LOCATION}")
 
 # COMMAND ----------
 
@@ -219,7 +231,18 @@ if null_pks == 0 and duplicate_pks == 0:
 
 # DBTITLE 1,Create Target Schema
 # Ensure target catalog and schema exist
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {TARGET_CATALOG}")
+# Create catalog with managed location (required when metastore has no root storage credential)
+try:
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS {TARGET_CATALOG} MANAGED LOCATION '{CATALOG_STORAGE_LOCATION}'")
+    print(f"✅ Created catalog {TARGET_CATALOG} with managed location")
+except Exception as e:
+    if "already exists" in str(e).lower() or "CATALOG_ALREADY_EXISTS" in str(e):
+        print(f"ℹ️ Catalog {TARGET_CATALOG} already exists, continuing...")
+    else:
+        print(f"⚠️ Could not create with managed location ({e}), trying without...")
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS {TARGET_CATALOG}")
+        print(f"✅ Created catalog {TARGET_CATALOG}")
+
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {TARGET_CATALOG}.{TARGET_SCHEMA}")
 print(f"✅ Target schema ready: {TARGET_CATALOG}.{TARGET_SCHEMA}")
 

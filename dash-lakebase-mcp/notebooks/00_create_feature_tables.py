@@ -4,19 +4,40 @@
 # MAGIC 
 # MAGIC This notebook creates **Feature Tables** in Unity Catalog for training and inference.
 # MAGIC 
-# MAGIC ## Data Source: Lakebase
+# MAGIC ## Data Source: Delta Staging Table
 # MAGIC 
-# MAGIC SKU data is loaded directly from **Lakebase** (`range_optimizer_catalog.range_optimizer.dim_sku`):
-# MAGIC - No hardcoded data - reads live from the Range Optimizer app's database
-# MAGIC - Single source of truth for all SKU attributes
-# MAGIC - Automatically stays in sync with app data
+# MAGIC SKU data is loaded from a **Delta staging table** (`{catalog}.{schema}.dim_sku_staging`):
+# MAGIC - Replicated from Lakebase via SQL Warehouse (run `00a_replicate_lakebase_to_delta.sql` first)
+# MAGIC - Lakebase only supports serverless SQL (DBSQL), not compute clusters
+# MAGIC - The staging table is refreshed via the `replicate_lakebase` job
 # MAGIC 
 # MAGIC ## Feature Tables Created
 # MAGIC 
 # MAGIC | Table | Source | Primary Key |
 # MAGIC |-------|--------|-------------|
-# MAGIC | `sku_features` | Lakebase `dim_sku` | `SKU_ID` |
+# MAGIC | `sku_features` | Delta `dim_sku_staging` | `SKU_ID` |
 # MAGIC | `demand_features` | Derived from `WEEKLY_UNITS` | `SKU_ID` |
+from databricks.sdk.runtime import spark, dbutils, display
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 📚 Install Dependencies
+# MAGIC 
+# MAGIC **Note:** This must run BEFORE any variable initialization to avoid losing state after `restartPython()`.
+
+# COMMAND ----------
+
+# MAGIC %pip install databricks-feature-engineering -q
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Restart Python to pick up installed packages:
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -26,8 +47,19 @@
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
-CATALOG = "smarter_forecasting"            # Your Unity Catalog name
-SCHEMA = "stock_optimization"              # Schema for features and models
+# Define widgets for job parameters (works when running interactively or as a job)
+dbutils.widgets.text("catalog", "smarter_forecasting", "Catalog Name")
+dbutils.widgets.text("schema", "stock_optimization", "Schema Name")
+dbutils.widgets.text("catalog_storage_location", 
+                     "abfss://iceberg@stdavidokeeffeinterop02.dfs.core.windows.net/root/catalogs/smarter_forecasting",
+                     "Catalog Storage Location")
+
+# Get parameter values
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+CATALOG_STORAGE_LOCATION = dbutils.widgets.get("catalog_storage_location")
+
+# Feature table names
 PRODUCT_FEATURES_TABLE = "sku_features"    # SKU attributes
 DEMAND_FEATURES_TABLE = "demand_features"  # Demand forecasts
 
@@ -37,16 +69,7 @@ DEMAND_FEATURES_PATH = f"{CATALOG}.{SCHEMA}.{DEMAND_FEATURES_TABLE}"
 
 print(f"📦 SKU Features Table: {PRODUCT_FEATURES_PATH}")
 print(f"📊 Demand Features Table: {DEMAND_FEATURES_PATH}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 📚 Install Dependencies
-
-# COMMAND ----------
-
-# MAGIC %pip install databricks-feature-engineering -q
-# MAGIC dbutils.library.restartPython()
+print(f"📁 Catalog Storage: {CATALOG_STORAGE_LOCATION}")
 
 # COMMAND ----------
 
@@ -75,9 +98,22 @@ print("✅ Feature Engineering Client initialized")
 # COMMAND ----------
 
 # DBTITLE 1,Setup Catalog & Schema
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+# Create catalog with managed location (required when metastore has no root storage credential)
+# This ensures data has a place to live in ADLS Gen2
+try:
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG} MANAGED LOCATION '{CATALOG_STORAGE_LOCATION}'")
+    print(f"✅ Created catalog {CATALOG} with managed location")
+except Exception as e:
+    if "already exists" in str(e).lower() or "CATALOG_ALREADY_EXISTS" in str(e):
+        print(f"ℹ️ Catalog {CATALOG} already exists, continuing...")
+    else:
+        # Try without managed location in case catalog already exists with different config
+        print(f"⚠️ Could not create with managed location ({e}), trying without...")
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+        print(f"✅ Created catalog {CATALOG}")
+
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
-print(f"✅ Created {CATALOG}.{SCHEMA}")
+print(f"✅ Created schema {CATALOG}.{SCHEMA}")
 
 # COMMAND ----------
 
@@ -93,21 +129,21 @@ print(f"✅ Created {CATALOG}.{SCHEMA}")
 
 # COMMAND ----------
 
-# DBTITLE 1,Load SKU Features from Lakebase
-# Lakebase tables are accessible via Unity Catalog
-LAKEBASE_CATALOG = "range_optimizer_catalog"
-LAKEBASE_SCHEMA = "range_optimizer"
-LAKEBASE_SKU_TABLE = f"{LAKEBASE_CATALOG}.{LAKEBASE_SCHEMA}.dim_sku"
+# DBTITLE 1,Load SKU Features from Delta Staging Table
+# Data is replicated from Lakebase to Delta via SQL Warehouse (see 00a_replicate_lakebase_to_delta.sql)
+# Lakebase ONLY supports serverless SQL (DBSQL), not compute clusters
+STAGING_TABLE = f"{CATALOG}.{SCHEMA}.dim_sku_staging"
 
-print(f"📡 Loading SKU data from Lakebase: {LAKEBASE_SKU_TABLE}")
+print(f"📡 Loading SKU data from Delta staging table: {STAGING_TABLE}")
 
-# Read from Lakebase (live data from the app!)
+# Read from Delta staging table (replicated from Lakebase via DBSQL)
 try:
-    sku_features_df = spark.table(LAKEBASE_SKU_TABLE)
+    sku_features_df = spark.table(STAGING_TABLE)
     sku_features_pd = sku_features_df.toPandas()
-    print(f"✅ Loaded {len(sku_features_pd)} SKUs from Lakebase")
+    print(f"✅ Loaded {len(sku_features_pd)} SKUs from Delta staging table")
 except Exception as e:
-    print(f"⚠️ Could not load from Lakebase ({e})")
+    print(f"⚠️ Could not load from staging table ({e})")
+    print("   ⚠️  Make sure to run '00a - Replicate Lakebase to Delta' job first!")
     print("   Falling back to sample data...")
     # Minimal fallback - just a few products for testing
     sku_features_pd = pd.DataFrame([
@@ -299,14 +335,16 @@ for row in category_stats:
 # MAGIC %md
 # MAGIC ## 🎉 Complete!
 # MAGIC 
-# MAGIC **Feature tables created from Lakebase data!**
+# MAGIC **Feature tables created from Delta staging data!**
 # MAGIC 
 # MAGIC ### Data Flow
 # MAGIC 
 # MAGIC ```
 # MAGIC Lakebase (range_optimizer_catalog.range_optimizer.dim_sku)
-# MAGIC     ↓
-# MAGIC Feature Tables (main.stock_optimization.*)
+# MAGIC     ↓  (via SQL Warehouse - DBSQL only)
+# MAGIC Delta Staging ({catalog}.{schema}.dim_sku_staging)
+# MAGIC     ↓  (via Spark compute)
+# MAGIC Feature Tables ({catalog}.{schema}.sku_features, demand_features)
 # MAGIC     ↓
 # MAGIC ML Training & Inference
 # MAGIC ```
@@ -315,10 +353,15 @@ for row in category_stats:
 # MAGIC 
 # MAGIC | Table | Source | Primary Key |
 # MAGIC |-------|--------|-------------|
-# MAGIC | `smarter_forecasting.stock_optimization.sku_features` | Lakebase `dim_sku` | `SKU_ID` |
-# MAGIC | `smarter_forecasting.stock_optimization.demand_features` | Derived from `WEEKLY_UNITS` | `SKU_ID` |
+# MAGIC | `{catalog}.{schema}.sku_features` | Delta `dim_sku_staging` | `SKU_ID` |
+# MAGIC | `{catalog}.{schema}.demand_features` | Derived from `WEEKLY_UNITS` | `SKU_ID` |
 # MAGIC 
 # MAGIC ### Next Steps
 # MAGIC 
 # MAGIC 1. **Train Model**: Run `01_train_stock_optimizer` notebook
 # MAGIC 2. **Deploy Endpoint**: Run `02_deploy_serving_endpoint` notebook
+# MAGIC 
+# MAGIC ### Note on Lakebase
+# MAGIC 
+# MAGIC Lakebase can **only** be queried via serverless SQL (DBSQL), not Spark compute.
+# MAGIC The `00a_replicate_lakebase_to_delta.sql` job handles the CTAS to Delta.

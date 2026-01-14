@@ -22,9 +22,13 @@
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
-# Must match the model from notebook 01
-CATALOG = "smarter_forecasting"
-SCHEMA = "stock_optimization"
+# Define widgets for job parameters (works when running interactively or as a job)
+dbutils.widgets.text("catalog", "smarter_forecasting", "Catalog Name")
+dbutils.widgets.text("schema", "stock_optimization", "Schema Name")
+
+# Get parameter values (must match the model from notebook 01)
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = "range_optimizer"
 UC_MODEL_PATH = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 

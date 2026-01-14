@@ -12,16 +12,43 @@ variables:
   schema:
     description: Schema name for features and models
     default: stock_optimization
+  
+  catalog_storage_location:
+    description: ADLS Gen2 storage location for the managed catalog (required when metastore has no root storage credential)
+    default: "abfss://iceberg@stdavidokeeffeinterop02.dfs.core.windows.net/root/catalogs/smarter_forecasting"
+  
+  sql_warehouse_id:
+    description: SQL Warehouse ID for Lakebase queries (required - Lakebase only works with serverless SQL)
+    default: ""
 
 resources:
   jobs:
-    # Job 1: Create Feature Tables
+    # Job 0a: Replicate Lakebase to Delta (MUST use SQL Warehouse)
+    # Lakebase can ONLY be queried via serverless SQL (DBSQL), not compute
+    replicate_lakebase:
+      name: "[${bundle.environment}] 00a - Replicate Lakebase to Delta"
+      
+      tasks:
+        - task_key: ctas_lakebase
+          sql_task:
+            warehouse_id: ${var.sql_warehouse_id}
+            file:
+              path: ./sql/00a_replicate_lakebase_to_delta.sql
+              source: WORKSPACE
+            parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              catalog_storage_location: ${var.catalog_storage_location}
+      
+      # No parameters needed - SQL uses query parameters directly
+
+    # Job 0b: Create Feature Tables (reads from Delta staging, not Lakebase)
     create_feature_tables:
-      name: "[${bundle.environment}] 00 - Create Feature Tables"
+      name: "[${bundle.environment}] 00b - Create Feature Tables"
       
       tasks:
         - task_key: create_features
-          job_cluster_key: serverless_cluster
+          job_cluster_key: feature_cluster
           notebook_task:
             notebook_path: ./00_create_feature_tables.py
             source: WORKSPACE
@@ -30,11 +57,11 @@ resources:
                 package: databricks-feature-engineering
       
       job_clusters:
-        - job_cluster_key: serverless_cluster
+        - job_cluster_key: feature_cluster
           new_cluster:
             spark_version: 17.3.x-scala2.13
             node_type_id: Standard_DS3_v2
-            num_workers: 0  # Single node
+            num_workers: 0
             data_security_mode: SINGLE_USER
             runtime_engine: PHOTON
             spark_conf:
@@ -48,8 +75,10 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
+        - name: catalog_storage_location
+          default: ${var.catalog_storage_location}
 
-    # Job 2: Train Model
+    # Job 1: Train Model
     train_stock_optimizer:
       name: "[${bundle.environment}] 01 - Train Stock Optimizer"
       
@@ -70,7 +99,7 @@ resources:
           new_cluster:
             spark_version: 17.3.x-cpu-ml-scala2.13
             node_type_id: Standard_DS3_v2
-            num_workers: 0  # Single node
+            num_workers: 0
             data_security_mode: SINGLE_USER
             runtime_engine: PHOTON
             spark_conf:
@@ -84,8 +113,10 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
+        - name: catalog_storage_location
+          default: ${var.catalog_storage_location}
 
-    # Job 3: Deploy Serving Endpoint
+    # Job 2: Deploy Serving Endpoint
     deploy_serving_endpoint:
       name: "[${bundle.environment}] 02 - Deploy Serving Endpoint"
       
@@ -104,7 +135,7 @@ resources:
           new_cluster:
             spark_version: 17.3.x-cpu-ml-scala2.13
             node_type_id: Standard_DS3_v2
-            num_workers: 0  # Single node
+            num_workers: 0
             data_security_mode: SINGLE_USER
             runtime_engine: PHOTON
             spark_conf:
@@ -118,13 +149,34 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
+        - name: catalog_storage_location
+          default: ${var.catalog_storage_location}
 
-    # Full Pipeline Job - Run all notebooks in sequence
+    # Full Pipeline Job - Run all steps in sequence
+    # 1. Replicate Lakebase → Delta (SQL Warehouse)
+    # 2. Create Feature Tables (classic compute)
+    # 3. Train Model (ML compute)
+    # 4. Deploy Endpoint (ML compute)
     full_ml_pipeline:
       name: "[${bundle.environment}] Full ML Pipeline"
       
       tasks:
+        # Step 1: CTAS from Lakebase (requires SQL Warehouse)
+        - task_key: replicate_lakebase
+          sql_task:
+            warehouse_id: ${var.sql_warehouse_id}
+            file:
+              path: ./sql/00a_replicate_lakebase_to_delta.sql
+              source: WORKSPACE
+            parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              catalog_storage_location: ${var.catalog_storage_location}
+        
+        # Step 2: Create feature tables from Delta staging
         - task_key: create_features
+          depends_on:
+            - task_key: replicate_lakebase
           job_cluster_key: ml_cluster
           notebook_task:
             notebook_path: ./00_create_feature_tables.py
@@ -133,6 +185,7 @@ resources:
             - pypi:
                 package: databricks-feature-engineering
         
+        # Step 3: Train model
         - task_key: train_model
           depends_on:
             - task_key: create_features
@@ -146,6 +199,7 @@ resources:
             - pypi:
                 package: mlflow[databricks]
         
+        # Step 4: Deploy serving endpoint
         - task_key: deploy_endpoint
           depends_on:
             - task_key: train_model
@@ -162,7 +216,7 @@ resources:
           new_cluster:
             spark_version: 17.3.x-cpu-ml-scala2.13
             node_type_id: Standard_DS3_v2
-            num_workers: 0  # Single node
+            num_workers: 0
             data_security_mode: SINGLE_USER
             runtime_engine: PHOTON
             spark_conf:
@@ -176,11 +230,14 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
+        - name: catalog_storage_location
+          default: ${var.catalog_storage_location}
 
-# Sync notebooks to workspace
+# Sync files to workspace
 sync:
   include:
     - "*.py"
+    - "sql/*.sql"
 
 targets:
   dev:

@@ -1,23 +1,43 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 🏪 Range Optimizer Model - Training with Feature Store
-# MAGIC 
+# MAGIC
 # MAGIC This notebook trains and registers a **Range Optimizer** model to **Unity Catalog** using **Feature Store** integration.
-# MAGIC 
+# MAGIC
 # MAGIC ## Schema Alignment
 # MAGIC This model is **aligned** with the MCP app's schema:
 # MAGIC - Primary Key: `SKU_ID` (e.g., "SKU3001")
 # MAGIC - Input: `SKU_ID`, `SKU_NAME`, `WEEKLY_UNITS`, `DEMAND_STD`, `UNIT_COST`, `UNIT_PRICE`
 # MAGIC - Output: Optimization results including facings recommendations
-# MAGIC 
+# MAGIC
 # MAGIC ## What You'll Learn
 # MAGIC - Create training sets with FeatureLookup from Unity Catalog
 # MAGIC - Train classical ML models with Feature Store integration
 # MAGIC - Register models to Unity Catalog with feature metadata
 # MAGIC - Set model aliases for deployment
-# MAGIC 
+# MAGIC
 # MAGIC ## Prerequisites
 # MAGIC - Run `00_create_feature_tables` notebook first to create feature tables
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 📚 Install Dependencies
+# MAGIC
+# MAGIC **Note:** This must run BEFORE any variable initialization to avoid losing state after `restartPython()`.
+
+# COMMAND ----------
+
+# MAGIC %pip install databricks-feature-engineering numpy pandas mlflow -q
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Restart Python to pick up installed packages:
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -27,8 +47,20 @@
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
-CATALOG = "smarter_forecasting"     # Your Unity Catalog name
-SCHEMA = "stock_optimization"       # Schema for features and models
+# Define widgets for job parameters (works when running interactively or as a job)
+dbutils.widgets.text("catalog", "smarter_forecasting", "Catalog Name")
+dbutils.widgets.text("schema", "stock_optimization", "Schema Name")
+dbutils.widgets.text("catalog_storage_location", 
+                     "abfss://iceberg@stdavidokeeffeinterop02.dfs.core.windows.net/root/catalogs/smarter_forecasting",
+                     "Catalog Storage Location")
+dbutils.widgets.text("user", "david.okeeffe@databricks.com"
+                     "abfss://iceberg@stdavidokeeffeinterop02.dfs.core.windows.net/root/catalogs/smarter_forecasting",
+                     "Catalog Storage Location")
+
+# Get parameter values
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+CATALOG_STORAGE_LOCATION = dbutils.widgets.get("catalog_storage_location")
 MODEL_NAME = "range_optimizer"      # Model name
 
 # Feature tables (created in notebook 00)
@@ -41,16 +73,7 @@ UC_MODEL_PATH = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 print(f"📊 SKU Features: {SKU_FEATURES_TABLE}")
 print(f"📈 Demand Features: {DEMAND_FEATURES_TABLE}")
 print(f"📦 Model will be registered to: {UC_MODEL_PATH}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 📚 Install Dependencies
-
-# COMMAND ----------
-
-# MAGIC %pip install databricks-feature-engineering numpy pandas mlflow -q
-# MAGIC dbutils.library.restartPython()
+print(f"📁 Catalog Storage: {CATALOG_STORAGE_LOCATION}")
 
 # COMMAND ----------
 
@@ -86,7 +109,7 @@ print("✅ Feature Engineering Client initialized")
 
 # MAGIC %md
 # MAGIC ## ⚙️ Model Configuration
-# MAGIC 
+# MAGIC
 # MAGIC These parameters control the range optimization algorithm:
 
 # COMMAND ----------
@@ -117,7 +140,7 @@ print(f"   • Lead Time: {config.lead_time_days} days")
 
 # MAGIC %md
 # MAGIC ## 🧠 Model Implementation
-# MAGIC 
+# MAGIC
 # MAGIC The `RangeOptimizerModel` calculates optimal facings based on:
 # MAGIC - Weekly demand and volatility
 # MAGIC - Margin contribution per facing
@@ -288,12 +311,11 @@ print("✅ Model class defined")
 # COMMAND ----------
 
 # DBTITLE 1,Load Base Training DataFrame
-# Create base DataFrame with SKU IDs
+# Create base DataFrame with SKU IDs (CATEGORY will come from FeatureLookup)
 base_training_df = spark.sql(f"""
     SELECT DISTINCT
         d.SKU_ID,
-        p.SKU_NAME,
-        p.CATEGORY
+        p.SKU_NAME
     FROM {DEMAND_FEATURES_TABLE} d
     INNER JOIN {SKU_FEATURES_TABLE} p ON d.SKU_ID = p.SKU_ID
 """)
@@ -332,7 +354,6 @@ training_set = fe.create_training_set(
     df=base_training_df,
     feature_lookups=feature_lookups,
     label=None,  # Unsupervised optimization (no target label)
-    exclude_columns=['CATEGORY']  # Exclude duplicate column
 )
 
 # Load the training data
@@ -377,9 +398,20 @@ display(sample_output[['SKU_ID', 'SKU_NAME', 'RECOMMENDED_FACINGS', 'FACINGS_CHA
 # COMMAND ----------
 
 # DBTITLE 1,Setup Catalog & Schema
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+# Create catalog with managed location (required when metastore has no root storage credential)
+try:
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG} MANAGED LOCATION '{CATALOG_STORAGE_LOCATION}'")
+    print(f"✅ Created catalog {CATALOG} with managed location")
+except Exception as e:
+    if "already exists" in str(e).lower() or "CATALOG_ALREADY_EXISTS" in str(e):
+        print(f"ℹ️ Catalog {CATALOG} already exists, continuing...")
+    else:
+        print(f"⚠️ Could not create with managed location ({e}), trying without...")
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+        print(f"✅ Created catalog {CATALOG}")
+
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
-print(f"✅ Created {CATALOG}.{SCHEMA}")
+print(f"✅ Created schema {CATALOG}.{SCHEMA}")
 
 # COMMAND ----------
 
@@ -389,7 +421,6 @@ print(f"✅ Created {CATALOG}.{SCHEMA}")
 # COMMAND ----------
 
 # DBTITLE 1,Setup Experiment
-user = spark.conf.get('spark.databricks.workspace.user', 'unknown')
 experiment_name = f"/Users/{user}/range_optimization_feature_store"
 mlflow.set_experiment(experiment_name)
 print(f"📊 Experiment: {experiment_name}")
@@ -531,24 +562,24 @@ for category in sample_output['CATEGORY'].dropna().unique():
 
 # MAGIC %md
 # MAGIC ## 🎉 Complete!
-# MAGIC 
+# MAGIC
 # MAGIC **Model successfully registered to Unity Catalog with Feature Store integration!**
-# MAGIC 
+# MAGIC
 # MAGIC | Property | Value |
 # MAGIC |----------|-------|
 # MAGIC | Model Path | `main.stock_optimization.range_optimizer` |
 # MAGIC | Aliases | `@production`, `@champion` |
 # MAGIC | SKU Features | `main.stock_optimization.sku_features` |
 # MAGIC | Demand Features | `main.stock_optimization.demand_features` |
-# MAGIC 
+# MAGIC
 # MAGIC ### ✨ Key Features
-# MAGIC 
+# MAGIC
 # MAGIC 1. **Automatic Feature Lookup**: Model automatically retrieves features during inference
 # MAGIC 2. **Schema Aligned**: Input/output matches MCP app expectations
 # MAGIC 3. **Feature Governance**: Unity Catalog controls feature access
-# MAGIC 
+# MAGIC
 # MAGIC ### Model Input/Output
-# MAGIC 
+# MAGIC
 # MAGIC **Input** (minimal - features auto-fetched):
 # MAGIC ```python
 # MAGIC input_df = pd.DataFrame([
@@ -556,13 +587,13 @@ for category in sample_output['CATEGORY'].dropna().unique():
 # MAGIC     {'SKU_ID': 'SKU4001', 'SKU_NAME': 'Sriracha Original 455ml'},
 # MAGIC ])
 # MAGIC ```
-# MAGIC 
+# MAGIC
 # MAGIC **Output**:
 # MAGIC - `SKU_ID`, `SKU_NAME`, `CATEGORY`, `SEGMENT`, `BRAND`
 # MAGIC - `RECOMMENDED_FACINGS`, `FACINGS_CHANGE`, `CHANGE_TYPE`
 # MAGIC - `EXPECTED_WEEKLY_PROFIT`, `SPACE_PRODUCTIVITY`, `IS_RANGED`
-# MAGIC 
+# MAGIC
 # MAGIC ### Next Steps
-# MAGIC 
+# MAGIC
 # MAGIC 1. **Deploy Serving Endpoint**: Run `02_deploy_serving_endpoint` notebook
 # MAGIC 2. **View Lineage**: Open Catalog Explorer → Models → range_optimizer → Lineage tab
