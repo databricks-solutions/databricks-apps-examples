@@ -195,7 +195,8 @@ class AppConfig(BaseSettings):
     @property
     def mcp_server_url(self) -> str:
         """Get MCP Server URL from environment (Databricks injects this)"""
-        return os.environ.get("MCP_SERVER_URL", "http://localhost:9000")
+        # Default to port 7000 to avoid conflicts with SSH port forwarding (commonly uses 9000+)
+        return os.environ.get("MCP_SERVER_URL", "http://localhost:7000")
     
     # Keep uppercase alias for backward compatibility
     @property

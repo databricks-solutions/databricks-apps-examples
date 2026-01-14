@@ -41,7 +41,8 @@ _workspace_client = None
 
 def _get_mcp_url() -> str:
     """Get MCP server URL from environment"""
-    return os.environ.get("MCP_SERVER_URL", "http://localhost:9000")
+    # Default to port 7000 to avoid conflicts with SSH port forwarding (commonly uses 9000+)
+    return os.environ.get("MCP_SERVER_URL", "http://localhost:7000")
 
 
 def _log(message: str) -> None:
