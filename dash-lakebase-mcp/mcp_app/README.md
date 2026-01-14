@@ -11,28 +11,30 @@ Start both apps with one command:
 ```
 
 Access:
-- **MCP App**: http://localhost:9001
-- **UI App**: http://localhost:8003
+- **MCP App**: http://localhost:7001 (proxy) or http://localhost:7000 (direct)
+- **UI App**: http://localhost:7003
+
+**Note**: Uses port range 7000-7003 to avoid conflicts with SSH port forwarding (commonly uses 9000+)
 
 Stop all apps:
 ```bash
 ./stop-all-apps.sh
 ```
 
-### Run on custom ports (example: 9000-9004) and restart
+### Run on custom ports (example: 7000-7004) and restart
 
 ```bash
 # stop any existing sessions and free ports
 ./stop-all-apps.sh
 
-# start MCP on 9000/9001
-./run-databricks-app-local.sh mcp_app 9000 9001 daveok
+# start MCP on 7000/7001
+./run-databricks-app-local.sh mcp_app 7000 7001 daveok
 
-# start UI on 9002/9003, pointing at the MCP proxy
-MCP_SERVER_URL=http://localhost:9001 \
-  ./run-databricks-app-local.sh ui_app 9002 9003 daveok
+# start UI on 7002/7003, pointing at the MCP app port (7000)
+MCP_SERVER_URL=http://localhost:7000 \
+  ./run-databricks-app-local.sh ui_app 7002 7003 daveok
 
-# UI available at http://localhost:9003
+# UI available at http://localhost:7003
 ```
 
 **For detailed instructions**, see:
@@ -45,13 +47,13 @@ This application consists of two separate components for security isolation:
 
 ### 1. **Dash UI Application** (Main App)
 - Full-stack Dash application with data grid interface
-- Serves at `http://localhost:9000`
+- Serves at `http://localhost:7002` (app) or `http://localhost:7003` (proxy)
 - REST API at `/api`
 - Restricted database permissions (read/write via app logic)
 
 ### 2. **MCP Server** (AI Tooling)
 - Standalone Model Context Protocol server
-- Serves at `http://localhost:9001`
+- Serves at `http://localhost:7000` (app) or `http://localhost:7001` (proxy)
 - Elevated permissions for AI-powered operations
 - Used by Claude Desktop and other MCP clients
 
@@ -79,16 +81,18 @@ cp .env.example .env
 ```bash
 ./start-ui-app.sh
 # Or manually:
-uv run uvicorn range_optimizer.backend.app:app --reload --port 9000
+uv run uvicorn range_optimizer.backend.app:app --reload --port 7002
 ```
+
+Access at: **http://localhost:7002** (or **http://localhost:7003** via proxy)
 
 #### Run MCP Server (Optional - for AI features)
 ```bash
 # Manually:
-uv run uvicorn range_optimizer.backend.mcp_standalone:app --reload --port 9001
+uv run uvicorn range_optimizer.backend.mcp_standalone:app --reload --port 7000
 ```
 
-Access at: **http://localhost:9001/mcp**
+Access at: **http://localhost:7000/mcp** (or **http://localhost:7001/mcp** via proxy)
 
 ## Features
 
