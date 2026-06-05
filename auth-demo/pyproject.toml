@@ -14,3 +14,7 @@ dependencies = [
     "pyarrow>=20.0.0",
     "pyjwt>=2.10.1",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi-proxy.dev.databricks.com/simple"
+default = true
